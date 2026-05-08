@@ -1,0 +1,406 @@
+================================================================================
+SAUKELE — Wedding Registry Platform
+DATABASE SCHEMA
+================================================================================
+
+────────────────────────────────────────────────────────────────────────────────
+1. ERD (ASCII)
+────────────────────────────────────────────────────────────────────────────────
+┌─────────────────┐        ┌─────────────────┐        ┌─────────────────┐
+│     users       │  1:N   │   registries    │  1:N   │   gift_items    │
+│─────────────────│───────▶│─────────────────│───────▶│─────────────────│
+│ id (PK)         │        │ id (PK)         │        │ id (PK)         │
+│ email UNIQUE    │        │ userId (FK)     │        │ registryId (FK) │
+│ name            │        │ title           │        │ title           │
+│ passwordHash    │        │ coupleName      │        │ description     │
+│ role            │        │ weddingDate     │        │ imageUrl        │
+│ provider        │        │ isPublic        │        │ targetAmountKzt │
+│ createdAt       │        │ shareCode UNIQUE│        │ currentAmountKzt│
+│ updatedAt       │        │ status          │        │ targetAmountEur │
+└─────────────────┘        │ createdAt       │        │ exchangeRateAtTime│
+        │                  │ updatedAt       │        │ lockedAt        │
+        │                  └─────────────────┘        │ status          │
+        │                                             │ priority        │
+        │                                             │ createdAt       │
+        │                                             │ updatedAt       │
+        │                                             └─────────────────┘
+        │                                                      │ 1:N
+        │                                                      ▼
+        │                                            ┌─────────────────────┐
+        │                                            │    contributions    │
+        │                                            │─────────────────────│
+        │               ┌─────────────────┐          │ id (PK)             │
+        │    1:N        │ family_members  │          │ giftItemId (FK)     │
+        └─────────▶     │─────────────────│          │ userId (FK, null.)  │
+                        │ id (PK)         │          │ contributorName     │
+                        │ userId (FK)     │          │ amountKzt           │
+                        │ relatedUserId   │          │ amountEur           │
+                        │   (FK, null.)   │          │ exchangeRateAtTime  │
+                        │ name            │          │ lockedAtTimestamp   │
+                        │ relationshipType│          │ message             │
+                        │ kinshipTier     │          │ status              │
+                        │ createdAt       │          │ createdAt           │
+                        └────────────┘               └─────────────────────┘
+                          (self-referential                   │
+                           for kinship tree)                  │
+                                                              ▼ 1:N
+                                                   ┌────────────────┐
+        ┌──────────────┐                     │ exchange_rate_snaps  │
+        │    audit_logs     │                     │────────────────│
+        │──────────────│                     │ id (PK)              │
+        │ id (PK)           │                     │ fromCurrency         │
+        │ userId (FK, null.)│                     │ toCurrency           │
+        │ action            │                     │ rate (Decimal)       │
+        │ resourceType      │                     │ source               │
+        │ resourceId        │                     │ createdAt            │
+        │ oldValues (JSON)  │                     └────────────────┘
+        │ newValues (JSON)  │
+        │ ipAddress         │
+        │ userAgent         │
+        │ createdAt         │
+        └──────────────┘
+          (append-only,
+           no UPDATE/DELETE)
+
+
+Relationships:
+  users          1:N  registries       (one user owns many registries)
+  registries     1:N  gift_items       (one registry has many gift items)
+  gift_items     1:N  contributions    (one gift item receives many contributions)
+  users          1:N  contributions    (one user makes many contributions; nullable)
+  users          1:N  family_members   (one user has many family member entries)
+  family_members M:N  users            (relatedUserId self-ref FK back to users)
+  users          1:N  audit_logs       (nullable; system events have null userId)
+
+────────────────────────────────────────────────────────────────────────────────
+2. PRISMA SCHEMA (prisma/schema.prisma)
+────────────────────────────────────────────────────────────────────────────────
+
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Enums ────────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  GUEST
+  REGISTRANT
+  ADMIN
+}
+
+enum RegistryStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum GiftItemStatus {
+  PENDING
+  FUNDED
+  PURCHASED
+  DELIVERED
+}
+
+enum GiftItemPriority {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum ContributionStatus {
+  PENDING
+  CONFIRMED
+  REFUNDED
+}
+
+enum RelationshipType {
+  PARENT
+  SIBLING
+  CHILD
+  COUSIN
+  UNCLE_AUNT
+  FAMILY_FRIEND
+  OTHER
+}
+
+enum KinshipTier {
+  CLOSE      // ата-ана: suggest >= 50,000 KZT
+  EXTENDED   // жиен-жаран: suggest >= 20,000 KZT
+  FRIEND     // досжар: suggest >= 5,000 KZT
+}
+
+// ── Models ───────────────────────────────────────────────────────────────────
+
+model User {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique
+  name         String
+  passwordHash String                        // bcrypt hash; never plain text
+  role         UserRole @default(GUEST)
+  provider     String   @default("local")    // "local" | "google"
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  registries   Registry[]
+  contributions Contribution[]
+  familyMembers FamilyMember[] @relation("FamilyOwner")
+  relatedInFamilies FamilyMember[] @relation("FamilyRelated")
+  auditLogs    AuditLog[]
+
+  @@map("users")
+  @@index([email])
+  @@index([role])
+}
+
+model Registry {
+  id         Int            @id @default(autoincrement())
+  userId     Int
+  title      String
+  coupleName String
+  weddingDate DateTime
+  isPublic   Boolean        @default(false)
+  shareCode  String         @unique        // e.g. "saukele-xF3kP9"
+  status     RegistryStatus @default(ACTIVE)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  owner      User       @relation(fields: [userId], references: [id])
+  giftItems  GiftItem[]
+
+  @@map("registries")
+  @@index([userId])
+  @@index([shareCode])
+  @@index([status])
+}
+
+model GiftItem {
+  id                 Int              @id @default(autoincrement())
+  registryId         Int
+  title              String
+  description        String?
+  imageUrl           String?
+  targetAmountKzt    Decimal          @db.Decimal(12, 2)
+  currentAmountKzt   Decimal          @default(0) @db.Decimal(12, 2)
+  targetAmountEur    Decimal?         @db.Decimal(10, 2)
+  exchangeRateAtTime Decimal?         @db.Decimal(10, 6) // KZT/EUR rate at creation
+  lockedAt           DateTime?                          // when rate was snapshotted
+  status             GiftItemStatus   @default(PENDING)
+  priority           GiftItemPriority @default(MEDIUM)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  registry      Registry       @relation(fields: [registryId], references: [id])
+  contributions Contribution[]
+
+  @@map("gift_items")
+  @@index([registryId])
+  @@index([status])
+  @@index([registryId, status])   // composite for "find pending items in registry"
+}
+
+model Contribution {
+  id                 Int                @id @default(autoincrement())
+  giftItemId         Int
+  userId             Int?               // null for anonymous contributors
+  contributorName    String
+  amountKzt          Decimal            @db.Decimal(12, 2)
+  amountEur          Decimal?           @db.Decimal(10, 2)
+  exchangeRateAtTime Decimal            @db.Decimal(10, 6) // LOCKED, never updated
+  lockedAtTimestamp  DateTime                              // LOCKED, never updated
+  message            String?
+  status             ContributionStatus @default(PENDING)
+  createdAt          DateTime           @default(now())
+
+  giftItem GiftItem @relation(fields: [giftItemId], references: [id])
+  user     User?    @relation(fields: [userId], references: [id])
+
+  @@map("contributions")
+  @@index([giftItemId])
+  @@index([userId])
+  @@index([giftItemId, status])
+  @@index([createdAt])             // cursor-based pagination anchor
+}
+
+model FamilyMember {
+  id               Int              @id @default(autoincrement())
+  userId           Int              // The registrant who owns this tree entry
+  relatedUserId    Int?             // FK to users (nullable: relative may not be registered)
+  name             String           // Display name (used when relatedUserId is null)
+  relationshipType RelationshipType
+  kinshipTier      KinshipTier
+  createdAt        DateTime         @default(now())
+
+  owner   User  @relation("FamilyOwner", fields: [userId], references: [id])
+  related User? @relation("FamilyRelated", fields: [relatedUserId], references: [id])
+
+  @@map("family_members")
+  @@index([userId])
+  @@index([relatedUserId])
+  @@index([userId, kinshipTier])   // for tier-based gift suggestions
+}
+
+model AuditLog {
+  id           Int      @id @default(autoincrement())
+  userId       Int?     // null for system actions
+  action       String   // e.g. "CONTRIBUTION_CREATED", "STATUS_ADVANCED"
+  resourceType String   // e.g. "GiftItem", "Registry"
+  resourceId   Int
+  oldValues    Json?    // snapshot before change
+  newValues    Json?    // snapshot after change
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+  @@index([userId])
+  @@index([resourceType, resourceId])
+  @@index([createdAt])             // for paginated admin log viewer
+}
+
+model ExchangeRateSnapshot {
+  id           Int      @id @default(autoincrement())
+  fromCurrency String   // e.g. "EUR"
+  toCurrency   String   // e.g. "KZT"
+  rate         Decimal  @db.Decimal(10, 6)
+  source       String   // e.g. "exchangeratesapi.io"
+  createdAt    DateTime @default(now())
+
+  @@map("exchange_rate_snapshots")
+  @@index([fromCurrency, toCurrency])
+  @@index([createdAt])             // fetch latest: ORDER BY createdAt DESC LIMIT 1
+}
+
+────────────────────────────────────────────────────────────────────────────────
+3. MIGRATION STRATEGY (Prisma Migrate)
+────────────────────────────────────────────────────────────────────────────────
+
+All schema changes follow this workflow — never edit existing migration.sql files.
+
+Initial Setup:
+  npx prisma migrate dev --name init
+  # Creates: prisma/migrations/YYYYMMDDHHMMSS_init/migration.sql
+
+Adding a new column later (example — adding avatarUrl to users):
+  # 1. Update prisma/schema.prisma (add the field)
+  # 2. Run:
+  npx prisma migrate dev --name add_avatar_to_users
+  # Prisma diffs schema vs DB, generates new migration.sql, applies it.
+
+Production Deployment:
+  npx prisma migrate deploy
+  # Runs only pending migrations; safe for production (no data loss).
+  # NEVER use `prisma migrate reset` in production (drops all data).
+
+Rollback Strategy:
+  - Development: npx prisma migrate reset (wipes DB, re-runs all migrations).
+  - Production: Write a new forward migration that reverts the change.
+    Example: If you added a NOT NULL column, create a new migration that
+    makes it nullable or drops it. Never go backward.
+
+Seeding:
+  npx prisma db seed
+  # Runs prisma/seed.js (creates admin user + sample exchange rate)
+
+────────────────────────────────────────────────────────────────────────────────
+4. THE "NASTY QUERY" — Recursive Kinship Tree Traversal
+────────────────────────────────────────────────────────────────────────────────
+
+Use-case:
+  When a logged-in user contributes to a gift, the API checks whether that
+  contributor is in the registry owner's family tree and at what kinship tier.
+  The family_members table is self-referential and can be multi-level deep
+  (e.g., cousin-of-cousin). This requires a recursive CTE.
+
+SQL:
+  -- Find kinship tier of :contributorId in :registrantId's family tree
+  WITH RECURSIVE kinship_tree AS (
+    -- Base case: direct family members of the registrant
+    SELECT
+      fm.id,
+      fm.related_user_id,
+      fm.kinship_tier,
+      1 AS depth
+    FROM family_members fm
+    WHERE fm.user_id = :registrantId
+      AND fm.related_user_id IS NOT NULL
+
+    UNION ALL
+
+    -- Recursive case: traverse one level deeper
+    SELECT
+      fm.id,
+      fm.related_user_id,
+      fm.kinship_tier,
+      kt.depth + 1
+    FROM family_members fm
+    INNER JOIN kinship_tree kt ON kt.related_user_id = fm.user_id
+    WHERE kt.depth < 5           -- max recursion depth to prevent infinite loops
+  )
+  SELECT kinship_tier
+  FROM kinship_tree
+  WHERE related_user_id = :contributorId
+  ORDER BY depth ASC             -- closest relationship wins
+  LIMIT 1;
+
+Indexing Strategy:
+  @@index([userId])            -- anchors the base case filter (WHERE user_id = ?)
+  @@index([relatedUserId])     -- anchors the recursive join (ON related_user_id = ?)
+  @@index([userId, kinshipTier]) -- covers tier-only lookups without full scan
+
+EXPLAIN ANALYZE prediction:
+  -- With indexes, base case does Index Scan on family_members(user_id).
+  -- Recursive step does Index Scan on family_members(related_user_id).
+  -- Depth cap of 5 limits recursion; total rows visited ≈ O(branching^5).
+  -- For a typical Kazakh wedding (50–200 relatives), this is well under 1ms.
+  -- Without indexes: Seq Scan on full family_members table per recursion level.
+  --   At 10k rows and depth=5 that is 50k row reads vs ~250 with indexes.
+
+Prisma Usage (via $queryRaw for recursive CTE):
+  const result = await prisma.$queryRaw`
+    WITH RECURSIVE kinship_tree AS (
+      SELECT related_user_id, kinship_tier, 1 AS depth
+      FROM family_members WHERE user_id = ${registrantId}
+        AND related_user_id IS NOT NULL
+      UNION ALL
+      SELECT fm.related_user_id, fm.kinship_tier, kt.depth + 1
+      FROM family_members fm
+      JOIN kinship_tree kt ON kt.related_user_id = fm.user_id
+      WHERE kt.depth < 5
+    )
+    SELECT kinship_tier FROM kinship_tree
+    WHERE related_user_id = ${contributorId}
+    ORDER BY depth ASC LIMIT 1
+  `;
+  // Note: $queryRaw uses tagged template literals — Prisma parameterizes
+  // the values automatically. No string concatenation. SQL-injection safe.
+
+ACID Note on Pool Funding (Contribution POST):
+  await prisma.$transaction(async (tx) => {
+    const item = await tx.giftItem.findUnique({
+      where: { id: giftItemId }
+    });
+    if (item.status === 'PURCHASED' || item.status === 'DELIVERED') {
+      throw new Error('ITEM_NOT_ACCEPTING_CONTRIBUTIONS');
+    }
+    const newAmount = item.currentAmountKzt + amountKzt;
+    if (newAmount > item.targetAmountKzt) {
+      throw new Error('EXCEEDS_TARGET');
+    }
+    const contribution = await tx.contribution.create({ data: { ... } });
+    const newStatus = newAmount >= item.targetAmountKzt ? 'FUNDED' : 'PENDING';
+    await tx.giftItem.update({
+      where: { id: giftItemId },
+      data: { currentAmountKzt: newAmount, status: newStatus }
+    });
+    await tx.auditLog.create({ data: { action: 'CONTRIBUTION_CREATED', ... } });
+    return contribution;
+  });
+  // If any step throws, Prisma rolls back the entire transaction.

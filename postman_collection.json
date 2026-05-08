@@ -1,0 +1,1471 @@
+{
+  "info": {
+    "name": "Saukele API - Full Blueprint Collection",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Full Postman collection generated from blueprint/openapi.yaml for all Saukele backend endpoints"
+  },
+  "item": [
+    {
+      "name": "Auth / Register",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"name\": \"Tester\",\n  \"password\": \"Test12345\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/auth/register",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "auth",
+            "register"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "pm.collectionVariables.set('testEmail', `tester+${Date.now()}@example.com`);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 201', () => pm.response.to.have.status(201));",
+              "pm.test('Tokens returned', () => {",
+              "  const json = pm.response.json();",
+              "  pm.expect(json.accessToken).to.be.a('string');",
+              "  pm.expect(json.refreshToken).to.be.a('string');",
+              "  pm.collectionVariables.set('accessToken', json.accessToken);",
+              "  pm.collectionVariables.set('refreshToken', json.refreshToken);",
+              "  pm.environment.set('accessToken', json.accessToken);",
+              "  pm.environment.set('refreshToken', json.refreshToken);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth / Login",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"Test12345\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "auth",
+            "login"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Tokens returned', () => {",
+              "  const json = pm.response.json();",
+              "  pm.expect(json.accessToken).to.be.a('string');",
+              "  pm.expect(json.refreshToken).to.be.a('string');",
+              "  pm.collectionVariables.set('accessToken', json.accessToken);",
+              "  pm.collectionVariables.set('refreshToken', json.refreshToken);",
+              "  pm.environment.set('accessToken', json.accessToken);",
+              "  pm.environment.set('refreshToken', json.refreshToken);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth / Login Admin",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"Admin123!\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "auth",
+            "login"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Admin tokens saved', () => {",
+              "  const json = pm.response.json();",
+              "  pm.expect(json.accessToken).to.be.a('string');",
+              "  pm.collectionVariables.set('accessToken', json.accessToken);",
+              "  pm.collectionVariables.set('refreshToken', json.refreshToken);",
+              "  pm.environment.set('accessToken', json.accessToken);",
+              "  pm.environment.set('refreshToken', json.refreshToken);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth / Refresh Token",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/auth/refresh",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "auth",
+            "refresh"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('New accessToken returned', () => {",
+              "  const json = pm.response.json();",
+              "  pm.expect(json.accessToken).to.be.a('string');",
+              "  pm.collectionVariables.set('accessToken', json.accessToken);",
+              "  pm.environment.set('accessToken', json.accessToken);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth / Get Profile",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/auth/me",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "auth",
+            "me"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "const accessToken = pm.collectionVariables.get('accessToken') || pm.environment.get('accessToken');",
+              "if (accessToken) {",
+              "  pm.request.headers.upsert({ key: 'Authorization', value: `Bearer ${accessToken}` });",
+              "}"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Has user fields', () => {",
+              "  const json = pm.response.json();",
+              "  pm.expect(json.email).to.be.a('string');",
+              "  pm.expect(json.role).to.be.a('string');",
+              "  pm.collectionVariables.set('userId', String(json.id));",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Registry / List Public",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/registries?take=20&sort=-createdAt",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "registries"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Returns data array', () => {",
+              "  pm.expect(pm.response.json().data).to.be.an('array');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Registry / Create",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Asel & Nurlan Wedding\",\n  \"coupleName\": \"Asel & Nurlan\",\n  \"weddingDate\": \"2026-12-31\",\n  \"isPublic\": true\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/registries",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "registries"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 201', () => pm.response.to.have.status(201));",
+              "pm.test('Registry created and vars saved', () => {",
+              "  const json = pm.response.json();",
+              "  pm.expect(json.id).to.be.a('number');",
+              "  pm.expect(json.shareCode).to.be.a('string');",
+              "  pm.collectionVariables.set('registryId', String(json.id));",
+              "  pm.collectionVariables.set('shareCode', json.shareCode);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Registry / Get by ShareCode",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/registries/share/{{shareCode}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "registries",
+            "share",
+            "{{shareCode}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Registry has shareCode', () => {",
+              "  pm.expect(pm.response.json().shareCode).to.be.a('string');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Registry / Get by ID",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/registries/{{registryId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "registries",
+            "{{registryId}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Registry found', () => {",
+              "  pm.expect(pm.response.json().id).to.be.a('number');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Registry / Update",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Asel & Nurlan Wedding Updated\",\n  \"coupleName\": \"Asel & Nurlan\",\n  \"weddingDate\": \"2026-12-31\",\n  \"isPublic\": true\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/registries/{{registryId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "registries",
+            "{{registryId}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Title updated', () => {",
+              "  pm.expect(pm.response.json().title).to.include('Updated');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Registry / Delete",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/registries/{{registryId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "registries",
+            "{{registryId}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 204 or 409', () => {",
+              "  pm.expect([204, 409]).to.include(pm.response.code);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "GiftItems / Add Item",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Kitchen Aid Mixer\",\n  \"description\": \"Premium kitchen mixer for the couple\",\n  \"imageUrl\": \"https://cdn.example.com/mixer.jpg\",\n  \"targetAmountKzt\": \"120000.00\",\n  \"priority\": \"HIGH\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/registries/{{registryId}}/items",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "registries",
+            "{{registryId}}",
+            "items"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 201', () => pm.response.to.have.status(201));",
+              "pm.test('Item created and id saved', () => {",
+              "  const json = pm.response.json();",
+              "  pm.expect(json.id).to.be.a('number');",
+              "  pm.collectionVariables.set('itemId', String(json.id));",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "GiftItems / List Items",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/registries/{{registryId}}/items?status=PENDING&take=20",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "registries",
+            "{{registryId}}",
+            "items"
+          ]
+        },
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Returns data array', () => {",
+              "  pm.expect(pm.response.json().data).to.be.an('array');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "GiftItems / Get Item",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/registries/{{registryId}}/items/{{itemId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "registries",
+            "{{registryId}}",
+            "items",
+            "{{itemId}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Item found', () => {",
+              "  pm.expect(pm.response.json().id).to.be.a('number');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "GiftItems / Update Item",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Kitchen Aid Mixer Updated\",\n  \"description\": \"Updated gift item description\",\n  \"targetAmountKzt\": \"130000.00\",\n  \"priority\": \"MEDIUM\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/registries/{{registryId}}/items/{{itemId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "registries",
+            "{{registryId}}",
+            "items",
+            "{{itemId}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Item updated', () => {",
+              "  pm.expect(pm.response.json().title).to.include('Updated');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "GiftItems / Advance Status",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"PURCHASED\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/registries/{{registryId}}/items/{{itemId}}/status",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "registries",
+            "{{registryId}}",
+            "items",
+            "{{itemId}}",
+            "status"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200 or 400 or 409', () => {",
+              "  pm.expect([200, 400, 409]).to.include(pm.response.code);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "GiftItems / Delete Item",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/registries/{{registryId}}/items/{{itemId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "registries",
+            "{{registryId}}",
+            "items",
+            "{{itemId}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 204', () => pm.response.to.have.status(204));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Contributions / Create Contribution",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"contributorName\": \"Guest Tester\",\n  \"amountKzt\": 20000,\n  \"message\": \"Поздравляю!\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/items/{{itemId}}/contributions",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "items",
+            "{{itemId}}",
+            "contributions"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 201', () => pm.response.to.have.status(201));",
+              "pm.test('Contribution created', () => {",
+              "  const json = pm.response.json();",
+              "  pm.expect(json.contribution.id).to.be.a('number');",
+              "  pm.collectionVariables.set('contributionId', String(json.contribution.id));",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Contributions / List Item Contributions",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/items/{{itemId}}/contributions?take=20&sort=-createdAt",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "items",
+            "{{itemId}}",
+            "contributions"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Returns data array', () => {",
+              "  pm.expect(pm.response.json().data).to.be.an('array');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Contributions / My Contributions",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/contributions/my?take=20&sort=-createdAt",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "contributions",
+            "my"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Returns data array', () => {",
+              "  pm.expect(pm.response.json().data).to.be.an('array');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Contributions / Get by ID",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/contributions/{{contributionId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "contributions",
+            "{{contributionId}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Contribution found', () => {",
+              "  pm.expect(pm.response.json().id).to.be.a('number');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Family / Add Member",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Aunt Aida\",\n  \"relationshipType\": \"UNCLE_AUNT\",\n  \"kinshipTier\": \"EXTENDED\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/family-members",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "family-members"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 201', () => pm.response.to.have.status(201));",
+              "pm.test('Family member created', () => {",
+              "  const json = pm.response.json();",
+              "  pm.expect(json.id).to.be.a('number');",
+              "  pm.collectionVariables.set('familyMemberId', String(json.id));",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Family / List Members",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/family-members?take=20",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "family-members"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Returns data array', () => {",
+              "  pm.expect(pm.response.json().data).to.be.an('array');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Family / Delete Member",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/family-members/{{familyMemberId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "family-members",
+            "{{familyMemberId}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 204', () => pm.response.to.have.status(204));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Family / Kinship Tier Lookup",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/family-members/kinship-tier/{{userId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "family-members",
+            "kinship-tier",
+            "{{userId}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Kinship tier returned', () => {",
+              "  pm.expect(pm.response.json().kinshipTier).to.be.a('string');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin / List Users",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/admin/users?take=20&sort=-createdAt",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "admin",
+            "users"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Returns data array', () => {",
+              "  pm.expect(pm.response.json().data).to.be.an('array');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin / Get User",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/admin/users/{{userId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "admin",
+            "users",
+            "{{userId}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('User found', () => {",
+              "  pm.expect(pm.response.json().id).to.be.a('number');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin / Delete User",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/admin/users/{{userId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "admin",
+            "users",
+            "{{userId}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200 or 409', () => {",
+              "  pm.expect([200, 409]).to.include(pm.response.code);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin / List Registries",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/admin/registries?take=20&sort=-createdAt",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "admin",
+            "registries"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Returns data array', () => {",
+              "  pm.expect(pm.response.json().data).to.be.an('array');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin / Audit Logs",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/admin/audit-logs?take=50&sort=-createdAt",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "admin",
+            "audit-logs"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Returns data array', () => {",
+              "  pm.expect(pm.response.json().data).to.be.an('array');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin / Override Exchange Rate",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"fromCurrency\": \"EUR\",\n  \"toCurrency\": \"KZT\",\n  \"rate\": \"520.000000\",\n  \"source\": \"manual_admin_override\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/admin/exchange-rates",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "admin",
+            "exchange-rates"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Exchange rate created', () => {",
+              "  pm.expect(pm.response.json().rate).to.be.a('string');",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+    ,
+    {
+      "name": "Admin / Change User Role",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"role\": \"REGISTRANT\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/admin/users/{{userId}}/role",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "admin",
+            "users",
+            "{{userId}}",
+            "role"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Role changed', () => {",
+              "  pm.expect(pm.response.json().role).to.eql('REGISTRANT');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth / Logout",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/auth/logout",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "auth",
+            "logout"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "const refreshToken = pm.collectionVariables.get('refreshToken') || pm.environment.get('refreshToken');",
+              "if (!refreshToken || refreshToken.length < 10) {",
+              "  throw new Error('refreshToken is missing. Run login/register first so the token is saved.');",
+              "}",
+              "pm.variables.set('refreshToken', refreshToken);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Logged out message', () => {",
+              "  pm.expect(pm.response.json().message).to.eql('Logged out successfully');",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:4000/api",
+      "type": "string"
+    },
+    {
+      "key": "shareCode",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "registryId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "itemId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "contributionId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "familyMemberId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refreshToken",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    ...existing code...
+    ,
+    {
+      "name": "Family / Add Member",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"My Spouse\",\n  \"relationshipType\": \"CHILD\",\n  \"kinshipTier\": \"CLOSE\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/family-members",
+          "host": ["{{baseUrl}}"],
+          "path": ["family-members"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 201', () => pm.response.to.have.status(201));",
+              "pm.test('Member created', () => {",
+              "  const json = pm.response.json();",
+              "  pm.expect(json.id).to.be.a('number');",
+              "  pm.collectionVariables.set('familyMemberId', String(json.id));",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Family / List Members",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/family-members?take=50",
+          "host": ["{{baseUrl}}"],
+          "path": ["family-members"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Returns data array', () => {",
+              "  pm.expect(pm.response.json().data).to.be.an('array');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Family / Delete Member",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/family-members/{{familyMemberId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["family-members", "{{familyMemberId}}"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200 or 404', () => {",
+              "  pm.expect([200, 404]).to.include(pm.response.code);",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

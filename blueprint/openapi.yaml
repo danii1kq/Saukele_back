@@ -1,0 +1,2283 @@
+openapi: "3.0.3"
+info:
+  title: Saukele Wedding Registry API
+  description: >
+    Pool-funded wedding gift registry platform with kinship-tier gift
+    suggestions, multi-currency support, and ACID-safe contributions.
+  version: "1.0.0"
+  contact:
+    name: Saukele Support
+    email: support@saukele.kz
+
+servers:
+  - url: http://localhost:3000/api
+    description: Local development server
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: Auth
+    description: Registration, login, and token management
+  - name: Registries
+    description: Wedding registry CRUD and public share-code access
+  - name: GiftItems
+    description: Gift items nested under a registry
+  - name: Contributions
+    description: Pool-funding contributions to gift items
+  - name: FamilyMembers
+    description: Kinship tree management and tier lookups
+  - name: Admin
+    description: Admin-only user management, audit logs, and full platform override access
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        JWT access token. Obtain via POST /auth/login.
+        Include as: Authorization: Bearer <token>
+
+  schemas:
+    # ── Error ──────────────────────────────────────────────────────────────
+    Error:
+      type: object
+      required: [error]
+      properties:
+        code:
+          type: string
+          nullable: true
+          example: VALIDATION_ERROR
+        error:
+          type: string
+          example: Resource not found
+        message:
+          type: string
+          nullable: true
+          example: Validation failed
+        details:
+          type: object
+          nullable: true
+        requestId:
+          type: string
+          nullable: true
+
+    # ── Monetary precision-safe scalars ───────────────────────────────────
+    MoneyAmount:
+      type: string
+      pattern: '^\\d+(\\.\\d{1,2})?$'
+      example: "15000.00"
+      description: Decimal monetary amount represented as string to avoid floating-point rounding.
+
+    ExchangeRate:
+      type: string
+      pattern: '^\\d+(\\.\\d{1,6})?$'
+      example: "497.368421"
+      description: Decimal exchange rate represented as string with up to 6 fractional digits.
+
+    # ── Pagination cursor ──────────────────────────────────────────────────
+    CursorMeta:
+      type: object
+      properties:
+        nextCursor:
+          type: integer
+          nullable: true
+          example: 42
+          description: Pass as ?cursor= in next request. Null means no more pages.
+        take:
+          type: integer
+          example: 20
+        hasMore:
+          type: boolean
+          example: true
+
+    # ── User ──────────────────────────────────────────────────────────────
+    UserPublic:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        email:
+          type: string
+          format: email
+          example: asel@example.kz
+        name:
+          type: string
+          example: Asel Nurlanovna
+        role:
+          type: string
+          enum: [GUEST, REGISTRANT, ADMIN]
+          example: REGISTRANT
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-01-15T10:00:00.000Z"
+
+    UserAdminDetail:
+      allOf:
+        - $ref: '#/components/schemas/UserPublic'
+        - type: object
+          properties:
+            provider:
+              type: string
+              example: local
+            updatedAt:
+              type: string
+              format: date-time
+              example: "2026-02-01T12:00:00.000Z"
+            registriesCount:
+              type: integer
+              example: 2
+            contributionsCount:
+              type: integer
+              example: 14
+            familyMembersCount:
+              type: integer
+              example: 6
+
+    AdminUserDeleteResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: User deleted successfully
+        deletedUserId:
+          type: integer
+          example: 27
+        deletedAt:
+          type: string
+          format: date-time
+          example: "2026-04-27T11:30:00.000Z"
+
+    # ── Auth ──────────────────────────────────────────────────────────────
+    RegisterRequest:
+      type: object
+      required: [email, name, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: asel@example.kz
+        name:
+          type: string
+          example: Asel Nurlanovna
+        password:
+          type: string
+          minLength: 8
+          example: Qwerty123!
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: asel@example.kz
+        password:
+          type: string
+          example: Qwerty123!
+
+    AuthResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Login successful
+        accessToken:
+          type: string
+          example: eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9...
+        refreshToken:
+          type: string
+          example: eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9...
+        user:
+          $ref: '#/components/schemas/UserPublic'
+
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+          example: eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9...
+
+    RefreshResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Token refreshed successfully
+        accessToken:
+          type: string
+          example: eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9...
+
+    # ── Registry ──────────────────────────────────────────────────────────
+    RegistryCreate:
+      type: object
+      required: [title, coupleName, weddingDate]
+      properties:
+        title:
+          type: string
+          example: Асель мен Нұрланның тойы
+        coupleName:
+          type: string
+          example: Asel & Nurlan
+        weddingDate:
+          type: string
+          format: date
+          example: "2026-06-15"
+        isPublic:
+          type: boolean
+          default: false
+
+    RegistryResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 3
+        userId:
+          type: integer
+          example: 1
+        title:
+          type: string
+          example: Асель мен Нұрланның тойы
+        coupleName:
+          type: string
+          example: Asel & Nurlan
+        weddingDate:
+          type: string
+          format: date
+          example: "2026-06-15"
+        isPublic:
+          type: boolean
+          example: true
+        shareCode:
+          type: string
+          example: saukele-xF3kP9
+        status:
+          type: string
+          enum: [ACTIVE, ARCHIVED]
+          example: ACTIVE
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-01-20T08:00:00.000Z"
+
+    # ── GiftItem ──────────────────────────────────────────────────────────
+    GiftItemCreate:
+      type: object
+      required: [title, targetAmountKzt]
+      properties:
+        title:
+          type: string
+          example: KitchenAid Stand Mixer
+        description:
+          type: string
+          example: 5-quart artisan stand mixer in Empire Red
+        imageUrl:
+          type: string
+          format: uri
+          example: https://cdn.saukele.kz/items/kitchenaid.jpg
+        targetAmountKzt:
+          allOf:
+            - $ref: '#/components/schemas/MoneyAmount'
+          description: Must be >= 1000.00 KZT
+          example: "189000.00"
+        priority:
+          type: string
+          enum: [HIGH, MEDIUM, LOW]
+          default: MEDIUM
+
+    GiftItemResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 7
+        registryId:
+          type: integer
+          example: 3
+        title:
+          type: string
+          example: KitchenAid Stand Mixer
+        description:
+          type: string
+          example: 5-quart artisan stand mixer in Empire Red
+        imageUrl:
+          type: string
+          nullable: true
+          example: https://cdn.saukele.kz/items/kitchenaid.jpg
+        targetAmountKzt:
+          allOf:
+            - $ref: '#/components/schemas/MoneyAmount'
+          example: "189000.00"
+        currentAmountKzt:
+          allOf:
+            - $ref: '#/components/schemas/MoneyAmount'
+          example: "75600.00"
+        targetAmountEur:
+          allOf:
+            - $ref: '#/components/schemas/MoneyAmount'
+          nullable: true
+          example: "380.00"
+        exchangeRateAtTime:
+          allOf:
+            - $ref: '#/components/schemas/ExchangeRate'
+          nullable: true
+          example: "497.368421"
+          description: KZT/EUR rate locked at item creation
+        lockedAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-01-20T08:00:00.000Z"
+        status:
+          type: string
+          enum: [PENDING, FUNDED, PURCHASED, DELIVERED]
+          example: PENDING
+        priority:
+          type: string
+          enum: [HIGH, MEDIUM, LOW]
+          example: HIGH
+        createdAt:
+          type: string
+          format: date-time
+
+    GiftItemStatusPatch:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [FUNDED, PURCHASED, DELIVERED]
+          example: PURCHASED
+
+    # ── Contribution ──────────────────────────────────────────────────────
+    ContributionCreate:
+      type: object
+      required: [amountKzt, contributorName]
+      properties:
+        amountKzt:
+          allOf:
+            - $ref: '#/components/schemas/MoneyAmount'
+          description: Must be >= 1000.00 KZT
+          example: "15000.00"
+        contributorName:
+          type: string
+          example: Darkhan Seitkali
+        message:
+          type: string
+          example: Бақыт тілеймін!
+
+    ContributionResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 22
+        giftItemId:
+          type: integer
+          example: 7
+        userId:
+          type: integer
+          nullable: true
+          example: 5
+        contributorName:
+          type: string
+          example: Darkhan Seitkali
+        amountKzt:
+          allOf:
+            - $ref: '#/components/schemas/MoneyAmount'
+          example: "15000.00"
+        amountEur:
+          allOf:
+            - $ref: '#/components/schemas/MoneyAmount'
+          nullable: true
+          example: "30.17"
+        exchangeRateAtTime:
+          allOf:
+            - $ref: '#/components/schemas/ExchangeRate'
+          example: "497.368421"
+          description: KZT/EUR rate locked at contribution time (immutable)
+        lockedAtTimestamp:
+          type: string
+          format: date-time
+          example: "2026-02-01T14:30:00.000Z"
+        message:
+          type: string
+          nullable: true
+          example: Бақыт тілеймін!
+        status:
+          type: string
+          enum: [PENDING, CONFIRMED, REFUNDED]
+          example: CONFIRMED
+        createdAt:
+          type: string
+          format: date-time
+
+    # ── FamilyMember ──────────────────────────────────────────────────────
+    FamilyMemberCreate:
+      type: object
+      required: [name, relationshipType, kinshipTier]
+      properties:
+        relatedUserId:
+          type: integer
+          nullable: true
+          example: 8
+          description: If relative is a registered user; null if not
+        name:
+          type: string
+          example: Нұрлан Қасымов (Ата)
+        relationshipType:
+          type: string
+          enum: [PARENT, SIBLING, CHILD, COUSIN, UNCLE_AUNT, FAMILY_FRIEND, OTHER]
+          example: PARENT
+        kinshipTier:
+          type: string
+          enum: [CLOSE, EXTENDED, FRIEND]
+          example: CLOSE
+
+    FamilyMemberResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 4
+        userId:
+          type: integer
+          example: 1
+        relatedUserId:
+          type: integer
+          nullable: true
+          example: 8
+        name:
+          type: string
+          example: Нұрлан Қасымов (Ата)
+        relationshipType:
+          type: string
+          example: PARENT
+        kinshipTier:
+          type: string
+          example: CLOSE
+        createdAt:
+          type: string
+          format: date-time
+
+    KinshipTierResponse:
+      type: object
+      properties:
+        kinshipTier:
+          type: string
+          enum: [CLOSE, EXTENDED, FRIEND]
+          nullable: true
+          example: EXTENDED
+        suggestedMinKzt:
+          type: integer
+          example: 20000
+
+    ExchangeRateSnapshotResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 101
+        fromCurrency:
+          type: string
+          example: EUR
+        toCurrency:
+          type: string
+          example: KZT
+        rate:
+          $ref: '#/components/schemas/ExchangeRate'
+        source:
+          type: string
+          example: admin_override
+        createdAt:
+          type: string
+          format: date-time
+
+    ExchangeRateOverrideRequest:
+      type: object
+      required: [fromCurrency, toCurrency, rate]
+      properties:
+        fromCurrency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          example: EUR
+        toCurrency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          example: KZT
+        rate:
+          $ref: '#/components/schemas/ExchangeRate'
+        source:
+          type: string
+          default: admin_override
+          example: admin_override
+
+# ── PATHS ────────────────────────────────────────────────────────────────────
+
+paths:
+
+  # ── AUTH ──────────────────────────────────────────────────────────────────
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Missing fields or password too short
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Password must be at least 8 characters
+        '409':
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Email already registered
+        '422':
+          description: Invalid email format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many registration attempts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login and receive JWT access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Missing email or password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Invalid credentials
+        '422':
+          description: Invalid input format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many login attempts (5 per 15 min)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Rotate refresh token and issue new access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Access token refreshed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshResponse'
+        '400':
+          description: Missing refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid or expired refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many refresh attempts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Get current authenticated user
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Current user profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/UserPublic'
+        '401':
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout (blacklists token in Redis)
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Logged out successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Logged out successfully
+        '401':
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ── REGISTRIES ────────────────────────────────────────────────────────────
+  /registries:
+    post:
+      tags: [Registries]
+      summary: Create a new wedding registry (REGISTRANT only)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistryCreate'
+      responses:
+        '201':
+          description: Registry created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistryResponse'
+        '400':
+          description: Missing required fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Role must be REGISTRANT or ADMIN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Invalid date format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    get:
+      tags: [Registries]
+      summary: List own registries (cursor-based pagination)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: cursor
+          in: query
+          schema:
+            type: integer
+          description: ID of last item from previous page
+          example: 10
+        - name: take
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+          example: 20
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [ACTIVE, ARCHIVED]
+          example: ACTIVE
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [createdAt, -createdAt, weddingDate]
+            default: -createdAt
+          example: "-createdAt"
+      responses:
+        '200':
+          description: Paginated list of registries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RegistryResponse'
+                  meta:
+                    $ref: '#/components/schemas/CursorMeta'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /registries/share/{shareCode}:
+    get:
+      tags: [Registries]
+      summary: Get a public registry by share code (no auth required)
+      security: []
+      parameters:
+        - name: shareCode
+          in: path
+          required: true
+          schema:
+            type: string
+          example: saukele-xF3kP9
+      responses:
+        '200':
+          description: Registry details with gift items
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/RegistryResponse'
+                  - type: object
+                    properties:
+                      giftItems:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/GiftItemResponse'
+        '404':
+          description: Registry not found or not public
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /registries/{id}:
+    get:
+      tags: [Registries]
+      summary: Get registry by ID (owner or admin)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 3
+      responses:
+        '200':
+          description: Registry details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistryResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Not the registry owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Registry not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      tags: [Registries]
+      summary: Update registry details (owner or admin)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistryCreate'
+      responses:
+        '200':
+          description: Registry updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistryResponse'
+        '400':
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Not the registry owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Registry not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags: [Registries]
+      summary: Archive or delete registry (owner or admin)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Registry archived/deleted
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Not the registry owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Registry not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Cannot delete registry with confirmed contributions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ── GIFT ITEMS ────────────────────────────────────────────────────────────
+  /registries/{registryId}/items:
+    post:
+      tags: [GiftItems]
+      summary: Add a gift item to a registry (owner or ADMIN)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: registryId
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 3
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GiftItemCreate'
+      responses:
+        '201':
+          description: Gift item created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GiftItemResponse'
+        '400':
+          description: Missing required fields or amount < 1000 KZT
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Not the registry owner and not ADMIN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Registry not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    get:
+      tags: [GiftItems]
+      summary: List gift items in a registry (owner or ADMIN; cursor-based pagination)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: registryId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: cursor
+          in: query
+          schema:
+            type: integer
+          example: 5
+        - name: take
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [PENDING, FUNDED, PURCHASED, DELIVERED]
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [createdAt, -createdAt, priority]
+            default: priority
+      responses:
+        '200':
+          description: Paginated list of gift items
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/GiftItemResponse'
+                  meta:
+                    $ref: '#/components/schemas/CursorMeta'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Not the registry owner and not ADMIN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Registry not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /registries/{registryId}/items/{itemId}:
+    get:
+      tags: [GiftItems]
+      summary: Get a single gift item (owner or ADMIN)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: registryId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Gift item details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GiftItemResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Not the registry owner and not ADMIN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Gift item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      tags: [GiftItems]
+      summary: Update a gift item (owner or ADMIN, PENDING status only)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: registryId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GiftItemCreate'
+      responses:
+        '200':
+          description: Gift item updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GiftItemResponse'
+        '400':
+          description: Invalid fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Not the registry owner and not ADMIN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Gift item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Cannot edit item that is FUNDED, PURCHASED, or DELIVERED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags: [GiftItems]
+      summary: Delete a gift item (owner or ADMIN, PENDING status only)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: registryId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Gift item deleted
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Not the registry owner and not ADMIN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Gift item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Cannot delete item with status FUNDED/PURCHASED/DELIVERED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /registries/{registryId}/items/{itemId}/status:
+    patch:
+      tags: [GiftItems]
+      summary: Advance gift item state machine (owner or ADMIN)
+      description: >
+        Allowed transitions: PENDING→FUNDED, FUNDED→PURCHASED, PURCHASED→DELIVERED.
+        Reverse transitions are forbidden. FUNDED→PURCHASED requires
+        currentAmountKzt >= targetAmountKzt.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: registryId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GiftItemStatusPatch'
+      responses:
+        '200':
+          description: Status advanced
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GiftItemResponse'
+        '400':
+          description: Invalid transition or funding not complete
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Cannot advance to PURCHASED — item is not fully funded
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Not the registry owner and not ADMIN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Gift item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Status transition not allowed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Invalid status value
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ── CONTRIBUTIONS ─────────────────────────────────────────────────────────
+  /items/{itemId}/contributions:
+    post:
+      tags: [Contributions]
+      summary: Contribute to a pool-funded gift item
+      description: >
+        Auth optional. If authenticated, userId is recorded.
+        Exchange rate is fetched from ExchangeRateSnapshot and locked immutably.
+        Runs inside a Prisma $transaction for ACID safety.
+      security:
+        - {}
+        - BearerAuth: []
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 7
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContributionCreate'
+      responses:
+        '201':
+          description: Contribution recorded; returns updated gift item state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  contribution:
+                    $ref: '#/components/schemas/ContributionResponse'
+                  giftItem:
+                    $ref: '#/components/schemas/GiftItemResponse'
+                  kinshipSuggestion:
+                    $ref: '#/components/schemas/KinshipTierResponse'
+        '400':
+          description: Amount below 1000 KZT or exceeds remaining target
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Gift item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Gift item not accepting contributions (PURCHASED/DELIVERED)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    get:
+      tags: [Contributions]
+      summary: List contributions for a gift item (owner or ADMIN; cursor-based pagination)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: cursor
+          in: query
+          schema:
+            type: integer
+        - name: take
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [PENDING, CONFIRMED, REFUNDED]
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [createdAt, -createdAt]
+            default: "-createdAt"
+      responses:
+        '200':
+          description: Paginated contributions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ContributionResponse'
+                  meta:
+                    $ref: '#/components/schemas/CursorMeta'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Not the registry owner and not ADMIN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Gift item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /contributions/my:
+    get:
+      tags: [Contributions]
+      summary: List contributions created by the authenticated user (ADMIN can filter by userId)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: cursor
+          in: query
+          schema:
+            type: integer
+        - name: take
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [PENDING, CONFIRMED, REFUNDED]
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [createdAt, -createdAt]
+            default: "-createdAt"
+      responses:
+        '200':
+          description: Paginated contribution list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ContributionResponse'
+                  meta:
+                    $ref: '#/components/schemas/CursorMeta'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /contributions/{id}:
+    get:
+      tags: [Contributions]
+      summary: Get a single contribution by ID (owner, contributor, or ADMIN)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Contribution details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContributionResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Contribution not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ── FAMILY MEMBERS ────────────────────────────────────────────────────────
+  /family-members:
+    post:
+      tags: [FamilyMembers]
+      summary: Add a family member to kinship tree (REGISTRANT or ADMIN)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FamilyMemberCreate'
+      responses:
+        '201':
+          description: Family member added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FamilyMemberResponse'
+        '400':
+          description: Missing required fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Role must be REGISTRANT or ADMIN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Invalid enum value
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    get:
+      tags: [FamilyMembers]
+      summary: List own family members (ADMIN can list any via query filters)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: query
+          schema:
+            type: integer
+          description: ADMIN only. List family tree entries for a specific user.
+        - name: cursor
+          in: query
+          schema:
+            type: integer
+        - name: take
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: kinshipTier
+          in: query
+          schema:
+            type: string
+            enum: [CLOSE, EXTENDED, FRIEND]
+      responses:
+        '200':
+          description: Paginated family member list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FamilyMemberResponse'
+                  meta:
+                    $ref: '#/components/schemas/CursorMeta'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /family-members/{id}:
+    delete:
+      tags: [FamilyMembers]
+      summary: Remove a family member entry (owner or ADMIN)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Family member removed
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Not the owner of this entry and not ADMIN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Family member entry not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /family-members/kinship-tier/{userId}:
+    get:
+      tags: [FamilyMembers]
+      summary: Determine kinship tier of a given user relative to the caller
+      description: >
+        Uses recursive CTE to traverse the family tree.
+        Returns kinshipTier and suggested minimum contribution in KZT.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 8
+      responses:
+        '200':
+          description: Kinship tier result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KinshipTierResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ── ADMIN ─────────────────────────────────────────────────────────────────
+  /admin/users:
+    get:
+      tags: [Admin]
+      summary: List all users (ADMIN only, cursor-based pagination)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: cursor
+          in: query
+          schema:
+            type: integer
+        - name: take
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [GUEST, REGISTRANT, ADMIN]
+        - name: provider
+          in: query
+          schema:
+            type: string
+            enum: [local, google]
+        - name: q
+          in: query
+          schema:
+            type: string
+          description: Case-insensitive search by email or name
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [createdAt, -createdAt, email]
+            default: "-createdAt"
+      responses:
+        '200':
+          description: Paginated user list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UserPublic'
+                  meta:
+                    $ref: '#/components/schemas/CursorMeta'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: ADMIN role required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /admin/users/{id}:
+    get:
+      tags: [Admin]
+      summary: Get full user profile with aggregates (ADMIN only)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: User details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserAdminDetail'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: ADMIN role required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags: [Admin]
+      summary: Delete a user and related data according to retention policy (ADMIN only)
+      description: >
+        ADMIN superuser action. Implementations may perform hard delete or soft delete.
+        Deleting protected users (for example the last ADMIN) should return HTTP 409.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: User deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserDeleteResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: ADMIN role required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Cannot delete protected user (for example last ADMIN)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /admin/registries:
+    get:
+      tags: [Admin]
+      summary: List all registries with full visibility (ADMIN only)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: cursor
+          in: query
+          schema:
+            type: integer
+        - name: take
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [ACTIVE, ARCHIVED]
+        - name: userId
+          in: query
+          schema:
+            type: integer
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [createdAt, -createdAt, weddingDate]
+            default: "-createdAt"
+      responses:
+        '200':
+          description: Paginated registry list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RegistryResponse'
+                  meta:
+                    $ref: '#/components/schemas/CursorMeta'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: ADMIN role required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /admin/users/{id}/role:
+    patch:
+      tags: [Admin]
+      summary: Change a user's role (ADMIN only)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role:
+                  type: string
+                  enum: [GUEST, REGISTRANT, ADMIN]
+                  example: REGISTRANT
+      responses:
+        '200':
+          description: Role updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPublic'
+        '400':
+          description: Invalid role value
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: ADMIN role required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Invalid enum value
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /admin/audit-logs:
+    get:
+      tags: [Admin]
+      summary: View append-only audit log (ADMIN only, cursor-based)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: cursor
+          in: query
+          schema:
+            type: integer
+        - name: take
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+        - name: resourceType
+          in: query
+          schema:
+            type: string
+          example: GiftItem
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [createdAt, -createdAt]
+            default: "-createdAt"
+      responses:
+        '200':
+          description: Paginated audit log entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                        userId:
+                          type: integer
+                          nullable: true
+                        action:
+                          type: string
+                          example: CONTRIBUTION_CREATED
+                        resourceType:
+                          type: string
+                          example: GiftItem
+                        resourceId:
+                          type: integer
+                        oldValues:
+                          type: object
+                          nullable: true
+                        newValues:
+                          type: object
+                          nullable: true
+                        ipAddress:
+                          type: string
+                          nullable: true
+                        createdAt:
+                          type: string
+                          format: date-time
+                  meta:
+                    $ref: '#/components/schemas/CursorMeta'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: ADMIN role required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /admin/exchange-rates:
+    patch:
+      tags: [Admin]
+      summary: Override and create new exchange rate snapshot (ADMIN only)
+      description: Creates a new immutable snapshot row. Historical snapshots are never updated.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExchangeRateOverrideRequest'
+      responses:
+        '200':
+          description: Snapshot created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExchangeRateSnapshotResponse'
+        '400':
+          description: Invalid currency or rate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: ADMIN role required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'

@@ -1,0 +1,170 @@
+================================================================================
+SAUKELE — Wedding Registry Platform
+SECURITY ANALYSIS — Threat Model & Architecture
+================================================================================
+
+────────────────────────────────────────────────────────────────────────────────
+1. STRIDE ANALYSIS
+────────────────────────────────────────────────────────────────────────────────
+
+┌───────────────┬────────────────────────────────────────────────────────┐
+│ STRIDE Category     │ Threat & Mitigation                                        					│
+├───────────────┼────────────────────────────────────────────────────────┤
+│ S — Spoofing        │ JWT Tampering                                              					│
+│                     │ Threat: Attacker modifies JWT payload (e.g., sub:1→sub:2)  					│
+│                     │ or downgrades algorithm to "none".                         					│
+│                     │ Mitigation:                                                					│
+│                     │  • HS512 algorithm enforced in both sign and verify;       					│
+│                     │    algorithms: ['HS512'] rejects RS256/none/HS256.         					│
+│                     │  • JWT_SECRET min 64 chars, validated at startup.          					│
+│                     │  • issuer + audience claims verified on every request.     					│
+│                     │  • Secret rotation plan: rotate JWT_SECRET every 90 days;  					│
+│                     │    keep OLD_JWT_SECRET in .env for 15-min grace period     					│
+│                     │    to drain in-flight tokens before removing.              					│
+│                     │  • Access token lifetime: 15 minutes (JWT_EXPIRES_IN).     					│
+│                     │  • Refresh token: 7 days, stored server-side hash in DB.   					│
+├───────────────┼────────────────────────────────────────────────────────┤
+│ T — Tampering       │ SQL Injection via ORM                                      					│
+│                     │ Threat: Malicious input reaches database query.            					│
+│                     │ Mitigation:                                                					│
+│                     │  • All queries use Prisma's type-safe query builder.       					│
+│                     │    prisma.user.findUnique({ where: { email } }) generates  					│
+│                     │    a prepared statement; no string concatenation.          					│
+│                     │  • The ONE exception (recursive CTE) uses $queryRaw with   					│
+│                     │    tagged template literals, which Prisma parameterizes    					│
+│                     │    automatically — NOT $queryRawUnsafe.                    					│
+│                     │  • express-mongo-sanitize strips $-operators from          					│
+│                     │    req.body, req.query, req.params before any route.       					│
+│                     │  • strictString() helper rejects non-string types in       					│
+│                     │    login/register to prevent NoSQL-style injection.        					│
+│                     │  • xss-clean middleware strips <script> tags globally.     					│
+│                     │  • Mass assignment prevented: only whitelisted fields      					│
+│                     │    are passed to Prisma update calls (explicit data: {}).  					│
+├───────────────┼────────────────────────────────────────────────────────┤
+│ R — Repudiation     │ Audit Log Design (Append-Only)                             					│
+│                     │ Threat: User denies making a contribution or status change.					│
+│                     │ Mitigation:                                                					│
+│                     │  • Every state-changing operation writes to audit_logs    				 	│
+│                     │    table inside the same Prisma $transaction.              					│
+│                     │  • AuditLog schema: id, userId, action, resourceType,      					│
+│                     │    resourceId, oldValues (JSON), newValues (JSON),         					│
+│                     │    ipAddress, userAgent, createdAt.                        					│
+│                     │  • No UPDATE or DELETE is ever issued on audit_logs.       					│
+│                     │    Prisma route handlers only call auditLog.create().      					│
+│                     │  • Admin can view full log at GET /admin/audit-logs.       					│
+│                     │  • Actions logged: CONTRIBUTION_CREATED, STATUS_ADVANCED,  					│
+│                     │    REGISTRY_CREATED, REGISTRY_DELETED, USER_ROLE_CHANGED.  					│
+│                     │  • oldValues/newValues capture the before/after snapshot   					│
+│                     │    for every status transition and monetary operation.     					│
+├───────────────┼────────────────────────────────────────────────────────┤
+│ D — Denial of       │ Rate Limiting Strategy (Redis Token Bucket)               					│
+│     Service         │ Threat: Brute-force login, spam contributions, DDoS.      					│
+│                     │ Mitigation:                                               					│
+│                     │  • Auth endpoints (login, register):                      					│
+│                     │      authLimiter: 5 requests / 15-minute window           					│
+│                     │      Key: `${req.ip}-${req.body.email || 'unknown'}`      					│
+│                     │      429 response after 5 failures.                       					│
+│                     │  • All API endpoints:                                     					│
+│                     │      apiLimiter: 100 requests / 1-minute window per IP    					│
+│                     │  • Contribution endpoint (financial, expensive DB txn):   					│
+│                     │      contributionLimiter: 10 req / 5-minute window per IP 					│
+│                     │  • Redis store (ioredis) shared across multiple Node      					│
+│                     │    processes, so limits are global not per-instance.      					│
+│                     │  • Rate limit headers returned: X-RateLimit-Limit,        					│
+│                     │    X-RateLimit-Remaining, X-RateLimit-Reset.              					│
+│                     │  • Disabled in NODE_ENV=test via skip: () => true.        					│
+├───────────────┼────────────────────────────────────────────────────────┤
+│ E — Elevation of    │ RBAC Authorization Middleware                             					│
+│     Privilege       │ Threat: Guest escalates to REGISTRANT or ADMIN.           					│
+│                     │ Mitigation:                                               					│
+│                     │  • requireRole(...roles) middleware (from Part 3 lab      					│
+│                     │    pattern) checks req.user.role against allowed list.    					│
+│                     │  • Role is always re-fetched from DB in requireAuth:      					│
+│                     │      prisma.user.findUnique({ where: { id: payload.sub }})					│
+│                     │    so a revoked/downgraded role takes effect immediately. 					│
+│                     │  • Role changes are ADMIN-only (PATCH /admin/users/:id/   					│
+│                     │    role). No self-role-upgrade endpoint exists.           					│
+│                     │  • Ownership checks: registry owner verified by           					│
+│                     │      if (registry.userId !== req.user.sub) → 403.         					│
+│                     │  • Field whitelisting on all update routes prevents       					│
+│                     │    mass-assignment escalation (role, passwordHash excluded)					│
+│                     │  • ALLOWED_UPDATE_FIELDS pattern from Lab 6 applied.     					│
+└───────────────┴────────────────────────────────────────────────────────┘
+
+────────────────────────────────────────────────────────────────────────────────
+2. SECRET MANAGEMENT
+────────────────────────────────────────────────────────────────────────────────
+
+Secret                   Storage                   Validation
+──────────────────────   ───────────────────────   ──────────────────────────────
+DATABASE_URL             .env (never committed)     startup config.js check
+JWT_SECRET               .env (never committed)     min 64 chars, startup check
+REFRESH_SECRET           .env (never committed)     min 64 chars, startup check
+REDIS_URL                .env (never committed)     startup connection test
+EXCHANGE_RATE_API_KEY    .env (never committed)     startup check, not logged
+
+Rules:
+  1. config.js runs BEFORE any route is registered. If any required secret is
+     missing or still contains the placeholder value ("replace-with"), the
+     process throws and exits — preventing a misconfigured deployment.
+
+  2. .gitignore includes: .env, *.env, .env.* (all variants).
+     Only .env.example is committed (contains no real values).
+
+  3. In CI/CD (GitHub Actions): secrets are stored as repository secrets,
+     injected as environment variables at build time. Never hardcoded in YAML.
+
+  4. Logging policy: no secret values are ever written to console.log/error.
+     The errorHandler.js masks the full error object in production
+     (NODE_ENV=production → generic "Internal Server Error" message).
+
+  5. Kaspi Pay API key (future integration): stored under KASPI_PAY_API_KEY
+     in .env. Only accessed in src/lib/kaspiPay.js. Never exposed in API
+     responses or log output.
+
+────────────────────────────────────────────────────────────────────────────────
+3. ADDITIONAL SECURITY LAYERS
+────────────────────────────────────────────────────────────────────────────────
+
+HELMET.JS (from Lab 6 pattern):
+  app.use(helmet({
+    contentSecurityPolicy: { directives: { defaultSrc: ["'self'"] } },
+    hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' }
+  }));
+  Custom headers: X-Content-Type-Options: nosniff, X-Frame-Options: DENY.
+
+CORS (whitelist from Lab 6 pattern):
+  Allowed origins: process.env.CLIENT_URL only.
+  credentials: true for cookie support.
+  Blocked requests from unknown origins return "Not allowed by CORS" (500).
+
+TOKEN BLACKLISTING (logout):
+  On POST /auth/logout:
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    await redis.setex(`blacked:${tokenHash}`, remainingTtl, '1');
+  In requireAuth middleware (after JWT verify):
+    const isBlacklisted = await redis.get(`blacked:${tokenHash}`);
+    if (isBlacklisted) return res.status(401).json({ error: 'Token revoked' });
+
+HTTPS ENFORCEMENT (production):
+  app.use((req, res, next) => {
+    if (process.env.NODE_ENV === 'production' && !req.secure) {
+      return res.redirect(301, 'https://' + req.headers.host + req.url);
+    }
+    next();
+  });
+
+PASSWORD SECURITY:
+  bcryptjs with SALT_ROUNDS = 12.
+  Minimum 8 characters enforced at registration.
+  passwordHash NEVER returned in any API response (select: { passwordHash: false }).
+
+FINANCIAL INTEGRITY:
+  All contribution writes use prisma.$transaction() to ensure:
+    - currentAmountKzt update and status transition are atomic.
+    - AuditLog entry is created in the same transaction.
+    - On any failure, the entire operation rolls back (no partial updates).
+  Exchange rate fields (exchangeRateAtTime, lockedAtTimestamp) are set once
+  at creation and never updated afterward — enforced at the ORM layer by
+  never including these fields in update data objects.

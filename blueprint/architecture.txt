@@ -1,0 +1,161 @@
+================================================================================
+SAUKELE — Wedding Registry Platform
+ARCHITECTURE DOCUMENT
+================================================================================
+
+────────────────────────────────────────────────────────────────────────────────
+1. TECH STACK TABLE
+────────────────────────────────────────────────────────────────────────────────
+
+Layer            Choice                  Version    Justification
+───────────────  ──────────────────────  ─────────  ──────────────────────────────────────────────────────────────────────
+Runtime          Node.js                 20 LTS     Single-threaded event loop handles high I/O (many concurrent
+                                                    contributors) without spawning OS threads. Ideal for this workload:
+                                                    reading/writing contribution records is pure I/O, not CPU-heavy.
+Framework        Express.js              4.x        Minimal, battle-tested. Matches labs 1-6 exactly.
+                                                    Async/await with the Node event loop means contribution POST
+                                                    handlers don't block while waiting on DB writes.
+Database         PostgreSQL              15+        ACID transactions mandatory for financial data (contribution
+                                                    amounts, exchange-rate locking). PostgreSQL recursive CTEs
+                                                    support the kinship family-tree query natively.
+ORM              Prisma                  6.x        Type-safe query builder as used in Labs 2–6.
+                                                    Prisma's $transaction() API maps directly to BEGIN/COMMIT,
+                                                    ensuring pool-funding updates are atomic.
+Auth             JWT (jsonwebtoken)      9.x        Stateless bearer tokens with sub claim (standard RFC 7519).
+                                                    HS512 algorithm, 15-min access token + 7-day refresh token.
+Password         bcryptjs                2.x        Pure-JS bcrypt (no native compilation). SALT_ROUNDS=12.
+Cache / Redis    ioredis                 5.x        Two use-cases:
+                                                    (a) Rate-limiting token bucket for auth endpoints
+                                                        (authLimiter: 5 req/15 min per IP+email key)
+                                                    (b) JWT blacklist for logout/token revocation:
+                                                        SETEX blacked:<token_hash> <ttl_seconds> "1"
+Security         Helmet.js               7.x        Sets 11 HTTP security headers (CSP, HSTS, X-Frame-Options).
+Security         express-rate-limit      7.x        Sliding-window rate limiter backed by Redis store.
+Security         express-mongo-sanitize  2.x        Strips NoSQL $-operators from req.body before ORM layer.
+Security         xss-clean               0.x        Strips <script> tags from all string inputs globally.
+Environment      dotenv + validation     16.x       .env loaded via dotenv; startup validation via custom
+                                                    config.js that throws if required vars are missing/empty.
+API Docs         swagger-ui-express      5.x        Serves /api/docs from the hand-written openapi.yaml.
+                 yamljs                  0.3         Parses openapi.yaml at startup.
+Testing          Jest + Supertest        29.x/6.x   Unit + integration tests. authLimiter disabled in NODE_ENV=test.
+
+────────────────────────────────────────────────────────────────────────────────
+2. FOLDER STRUCTURE (ASCII TREE)
+────────────────────────────────────────────────────────────────────────────────
+
+saukele-api/
+├── src/
+│   ├── config/
+│   │   └── config.js              # Reads .env, validates required vars, exports typed config object
+│   ├── lib/
+│   │   ├── prisma.js              # PrismaClient singleton (imported across all routes)
+│   │   ├── jwt.js                 # signAccessToken, signRefreshToken, verifyAccessToken (HS512)
+│   │   └── exchangeRate.js        # Fetches & stores ExchangeRateSnapshot from external provider
+│   ├── middleware/
+│   │   ├── auth.js                # requireAuth (JWT Bearer check) + requireRole(...roles) RBAC
+│   │   ├── rateLimit.js           # authLimiter (5/15min), apiLimiter (100/min), Redis store
+│   │   ├── sanitize.js            # sanitizeMongo (NoSQL injection) + sanitizeXSS (xss-clean)
+│   │   └── errorHandler.js        # Maps Prisma P2002/P2025 → 409/404; hides stack traces in prod
+│   ├── routes/
+│   │   ├── auth.js                # POST /register, POST /login, GET /me, POST /logout
+│   │   ├── registries.js          # CRUD for Registry + GET /share/:shareCode (public)
+│   │   ├── giftItems.js           # CRUD for GiftItem nested under registryId
+│   │   ├── contributions.js       # POST contribute, GET list, PATCH status
+│   │   ├── familyMembers.js       # CRUD for FamilyMember + GET /kinship-tier/:userId
+│   │   └── admin.js               # Admin-only: users, audit-logs, registries overview
+│   └── app.js                     # Express app setup: Helmet, CORS, sanitizers, routes, errorHandler
+├── prisma/
+│   ├── schema.prisma              # Single source of truth for all DB models
+│   └── migrations/                # Prisma Migrate history (auto-generated, never edited manually)
+│       └── YYYYMMDDHHMMSS_init/
+│           └── migration.sql
+├── scripts/
+│   └── set-password.js            # Dev utility: set password for existing users (like Part 3 lab)
+├── tests/
+│   ├── auth.test.js               # Integration tests for register/login/me
+│   ├── registries.test.js         # CRUD + share-code tests
+│   ├── contributions.test.js      # Pool funding + state machine + ACID tests
+│   └── familyMembers.test.js      # Kinship tier tests
+├── openapi.yaml                   # OpenAPI 3.0 spec (validated in editor.swagger.io)
+├── .env                           # Real secrets (never committed — in .gitignore)
+├── .env.example                   # Template with placeholder values
+├── .gitignore
+├── package.json
+└── README.md
+
+────────────────────────────────────────────────────────────────────────────────
+3. ENVIRONMENT STRATEGY
+────────────────────────────────────────────────────────────────────────────────
+
+.env.example (committed to repo — no real values):
+─────────────────────────────────────────────────
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/saukele_db?schema=public
+PORT=3000
+JWT_SECRET=replace-with-64-char-random-hex-string
+JWT_EXPIRES_IN=15m
+REFRESH_SECRET=replace-with-different-64-char-hex-string
+REFRESH_EXPIRES_IN=7d
+REDIS_URL=redis://localhost:6379
+EXCHANGE_RATE_API_KEY=replace-with-api-key
+CLIENT_URL=http://localhost:5173
+NODE_ENV=development
+
+Validation in src/config/config.js (runs at startup):
+──────────────────────────────────────────────────────
+// File: src/config/config.js
+require('dotenv').config();
+
+const REQUIRED = [
+  'DATABASE_URL', 'JWT_SECRET', 'REFRESH_SECRET',
+  'REDIS_URL', 'EXCHANGE_RATE_API_KEY'
+];
+
+for (const key of REQUIRED) {
+  if (!process.env[key] || process.env[key].includes('replace-with')) {
+    throw new Error(`Missing or placeholder env var: ${key}. Set it in .env`);
+  }
+}
+
+module.exports = {
+  port:         parseInt(process.env.PORT) || 3000,
+  databaseUrl:  process.env.DATABASE_URL,
+  jwtSecret:    process.env.JWT_SECRET,
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '15m',
+  refreshSecret:    process.env.REFRESH_SECRET,
+  refreshExpiresIn: process.env.REFRESH_EXPIRES_IN || '7d',
+  redisUrl:     process.env.REDIS_URL,
+  exchangeRateApiKey: process.env.EXCHANGE_RATE_API_KEY,
+  clientUrl:    process.env.CLIENT_URL || 'http://localhost:5173',
+  nodeEnv:      process.env.NODE_ENV || 'development',
+};
+
+Why this approach:
+  - No hardcoded secrets anywhere in source code.
+  - Application crashes immediately on startup if a required var is missing,
+    preventing a "hello world" deployment with broken auth or no DB.
+  - dotenv matches the pattern used in all labs (Parts 2–6).
+  - config.js is the SINGLE place that reads process.env, making testing easy
+    (just override the module or set process.env before import).
+
+────────────────────────────────────────────────────────────────────────────────
+4. WHY THIS FOLDER STRUCTURE
+────────────────────────────────────────────────────────────────────────────────
+
+  config/      Separation of configuration from business logic. Any route can
+               import config without touching process.env directly.
+
+  lib/         Shared utilities with no HTTP context (prisma singleton, jwt
+               helpers, exchange rate fetcher). Mirrors the lab pattern of
+               lib/prisma.js and lib/jwt.js from Parts 2 and 3.
+
+  middleware/  Cross-cutting concerns (auth, rate limiting, sanitization, error
+               handling) are isolated, testable, and stackable on any route.
+
+  routes/      One file per resource. Each exports an Express Router, mounted
+               in app.js. Matches the lab pattern from Parts 1–5.
+
+  prisma/      Prisma's own directory. schema.prisma is the source of truth;
+               migrations/ is append-only history.
+
+  tests/       Co-located integration tests using Jest + Supertest. Run with
+               NODE_ENV=test to disable rate limiters and use a test DB.

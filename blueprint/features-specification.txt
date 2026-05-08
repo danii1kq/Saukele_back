@@ -1,0 +1,147 @@
+================================================================================
+SAUKELE — Wedding Registry Platform
+FEATURES SPECIFICATION
+================================================================================
+
+────────────────────────────────────────────────────────────────────────────────
+1. USER ROLES
+────────────────────────────────────────────────────────────────────────────────
+
+GUEST (unauthenticated / newly registered, default role)
+  - Can browse public registries by share-code link
+  - Can view gift items on a registry
+  - Can make a contribution to a pool-funded gift item (anonymous or logged-in)
+  - Must register to track their own contribution history
+
+REGISTRANT (bride/groom who owns a registry)
+  - Inherits all GUEST permissions
+  - Can create and manage their own wedding registry
+  - Can add, edit, and delete gift items on their registry
+  - Can update gift item status along the funding state machine
+    (PENDING → FUNDED → PURCHASED → DELIVERED)
+  - Can manage their family kinship tree (add relatives with tier tags)
+  - Can view contribution history for their registry
+  - Can archive or delete their registry
+
+ADMIN
+  - Inherits all REGISTRANT permissions
+  - Can view and manage all users (change roles, deactivate)
+  - Can view all registries
+  - Can access the full audit log
+  - Can manually adjust exchange rate snapshots if provider fails
+
+────────────────────────────────────────────────────────────────────────────────
+2. FEATURE LIST BY ROLE
+────────────────────────────────────────────────────────────────────────────────
+
+GUEST
+  - GET /api/registries/share/:shareCode  → View public registry by unique code
+  - GET /api/registries/:id/items         → List gift items on a registry
+  - POST /api/items/:itemId/contributions → Contribute to a gift (pool funding)
+  - POST /api/auth/register               → Create account
+  - POST /api/auth/login                  → Get JWT access token
+
+REGISTRANT
+  - POST   /api/registries                → Create a new registry
+  - GET    /api/registries (own)          → List own registries
+  - PUT    /api/registries/:id            → Update registry details
+  - DELETE /api/registries/:id            → Archive or delete registry
+  - POST   /api/registries/:id/items      → Add a gift item
+  - PUT    /api/registries/:id/items/:iid → Edit gift item
+  - DELETE /api/registries/:id/items/:iid → Remove gift item
+  - PATCH  /api/registries/:id/items/:iid/status  → Advance state machine
+  - POST   /api/family-members            → Add family member (kinship tree)
+  - GET    /api/family-members            → View own family tree
+  - DELETE /api/family-members/:id        → Remove a family member entry
+  - GET    /api/contributions/my          → View received contributions
+  - GET    /api/auth/me                   → Get own profile
+
+ADMIN
+  - GET    /api/admin/users               → Paginated user list
+  - PATCH  /api/admin/users/:id/role      → Change user role
+  - GET    /api/admin/registries          → All registries (paginated)
+  - GET    /api/admin/audit-logs          → Full append-only audit log
+  - PATCH  /api/admin/exchange-rates      → Override exchange rate snapshot
+
+────────────────────────────────────────────────────────────────────────────────
+3. BUSINESS WORKFLOWS
+────────────────────────────────────────────────────────────────────────────────
+
+WORKFLOW A — Registry Creation & Setup
+  1. User registers (POST /api/auth/register) → receives JWT (role=GUEST).
+  2. User requests role upgrade to REGISTRANT (or admin assigns via PATCH).
+  3. Registrant creates registry (POST /api/registries):
+     - Provides title, weddingDate, coupleName, isPublic flag.
+     - System generates a unique 8-character shareCode (e.g. "saukele-xF3kP9").
+  4. Registrant adds gift items (POST /api/registries/:id/items):
+     - Each item has targetAmountKzt, optional targetAmountEur.
+     - System snapshots the current KZT/EUR exchange rate at creation time
+       and stores amount_kzt, amount_eur, exchange_rate_at_time, locked_at_timestamp.
+     - Initial status = PENDING.
+  5. Registrant optionally builds kinship tree (POST /api/family-members):
+     - Adds relatives with relationshipType and kinshipTier
+       (CLOSE for ата-ана, EXTENDED for жиен-жаран, FRIEND for others).
+  6. Registrant shares the unique URL: /registry/saukele-xF3kP9
+
+WORKFLOW B — Gift Contribution (Pool Funding) Flow
+  1. Guest opens shared registry link → GET /api/registries/share/:shareCode.
+  2. Guest browses gift items, selects one still in PENDING or partially funded.
+  3. Guest submits contribution (POST /api/items/:itemId/contributions):
+     a. Client sends { amount_kzt, contributorName, message }.
+     b. Server fetches latest exchange rate from ExchangeRateSnapshot table.
+     c. Server locks the rate: stores amount_kzt, amount_eur,
+        exchange_rate_at_time, locked_at_timestamp on the Contribution row.
+     d. Server updates GiftItem.currentAmountKzt += amount_kzt (inside
+        a Prisma transaction to prevent race conditions).
+     e. If currentAmountKzt >= targetAmountKzt:
+        → GiftItem.status transitions PENDING → FUNDED atomically.
+  4. System writes an AuditLog entry (action=CONTRIBUTION_CREATED).
+
+WORKFLOW C — Post-Funding State Machine Advancement
+  Status transitions (REGISTRANT only, via PATCH .../status):
+    PENDING   → FUNDED      (auto, triggered by contribution; or manual override)
+    FUNDED    → PURCHASED   (registrant confirms they bought the item)
+    PURCHASED → DELIVERED   (registrant confirms delivery)
+  Constraints:
+    - Status can only move FORWARD (no reversal except by ADMIN).
+    - FUNDED → PURCHASED requires currentAmountKzt >= targetAmountKzt.
+    - Attempting to contribute to a PURCHASED/DELIVERED item returns HTTP 409.
+
+WORKFLOW D — Kinship Tier Determination (Gift Suggestion)
+  1. Contributor logs in before contributing.
+  2. System checks FamilyMember table using a recursive CTE query:
+       WITH RECURSIVE family AS (
+         SELECT id, relatedUserId, kinshipTier FROM family_members
+         WHERE userId = :registrantId
+         UNION ALL
+         SELECT fm.id, fm.relatedUserId, fm.kinshipTier
+         FROM family_members fm JOIN family f ON f.relatedUserId = fm.userId
+       )
+       SELECT kinshipTier FROM family WHERE relatedUserId = :contributorId LIMIT 1;
+  3. Depending on result:
+     - CLOSE (ата-ана)    → suggest gifts >= 50,000 KZT
+     - EXTENDED (жиен-жаран) → suggest gifts >= 20,000 KZT
+     - FRIEND / not found → suggest gifts >= 5,000 KZT
+  4. Suggestion is returned in the contribution form prefill; contributor
+     can override the amount freely.
+
+────────────────────────────────────────────────────────────────────────────────
+4. CONSTRAINTS & BUSINESS RULES
+────────────────────────────────────────────────────────────────────────────────
+
+  RULE-01  Minimum contribution amount: 1,000 KZT.
+  RULE-02  A Contribution's exchange rate fields are immutable after creation
+           (never UPDATE historical rates — store once, never modify).
+  RULE-03  GiftItem.currentAmountKzt cannot exceed GiftItem.targetAmountKzt.
+           Any excess is rejected with HTTP 400.
+  RULE-04  A registry must have at least one gift item before it can be made
+           public (isPublic=true).
+  RULE-05  Deleting a GiftItem with status FUNDED/PURCHASED/DELIVERED is
+           forbidden (returns HTTP 409 Conflict).
+  RULE-06  shareCode is unique across all registries and URL-safe (alphanumeric).
+  RULE-07  Only the registry owner (or ADMIN) can advance the funding state
+           machine.
+  RULE-08  All monetary operations (contributions, state transitions) must run
+           inside a Prisma transaction ($transaction) to maintain ACID guarantees.
+  RULE-09  AuditLog is append-only — no UPDATE or DELETE allowed on that table.
+  RULE-10  A user with role GUEST cannot create a Registry. Must be REGISTRANT.

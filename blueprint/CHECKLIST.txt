@@ -1,0 +1,73 @@
+================================================================================
+SAUKELE — Wedding Registry Platform
+SUBMISSION CHECKLIST
+================================================================================
+
+[x] I validated openapi.yaml in editor.swagger.io
+      → All paths tested, no schema $ref errors, valid OpenAPI 3.0.3
+
+[x] I ran SQL schema through syntax checker
+      → Prisma schema validated via: npx prisma validate
+      → Prisma generates valid PostgreSQL DDL on migrate
+
+[x] All documents include clear section headers (txt format)
+      → features-specification.txt   — 4 numbered sections with headers
+      → architecture.txt             — 4 numbered sections with headers
+      → database-schema.txt          — 4 numbered sections with headers
+      → openapi.yaml                 — grouped by tags, valid YAML structure
+      → security-analysis.txt        — STRIDE table + 3 numbered sections
+      → project-structure.txt        — ASCII tree + dependencies table
+
+[x] Project-specific Saukele requirements addressed:
+      → Kinship Logic: recursive CTE in database-schema.txt section 4
+      → Pool Funding state machine: PENDING→FUNDED→PURCHASED→DELIVERED
+           documented in features-specification.txt (Workflow B & C)
+           and Prisma schema (GiftItemStatus enum)
+      → Multi-currency: exchangeRateAtTime + lockedAtTimestamp immutable fields
+           on both GiftItem and Contribution models
+
+[x] No raw SQL used in application code
+      → All queries via Prisma ORM query builder
+      → Only exception: $queryRaw with tagged template literals (parameterized)
+         for the recursive CTE kinship query
+
+[x] Cursor-based pagination applied to ALL list endpoints
+      → ?cursor=<id>&take=<n>&sort=<field> on every GET collection endpoint
+      → Justification in architecture.txt: OFFSET scans and discards rows;
+        cursor uses index seek — O(log n) vs O(n)
+
+[x] Database transactions (ACID) mentioned for financial operations
+      → Contribution POST uses prisma.$transaction() (database-schema.txt, section 4)
+      → State machine advancement uses prisma.$transaction()
+
+[x] Security schemes defined in openapi.yaml
+      → BearerAuth (HTTP Bearer JWT) defined in components/securitySchemes
+      → Applied globally (security: [BearerAuth: []]) with per-endpoint overrides
+
+[x] Error responses 400, 401, 403, 404, 409, 422, 429, 500 on all endpoints
+      → Verified in openapi.yaml: all paths include full error response coverage
+
+[x] Environment secrets validated at startup (no hardcoded keys)
+      → src/config/config.js throws on missing/placeholder values
+      → .env.example committed with placeholders only
+
+[x] Redis use-case documented
+      → Rate limiting (authLimiter, apiLimiter, contributionLimiter)
+      → JWT blacklist (token revocation on logout)
+      → Both described in architecture.txt Tech Stack Table and security-analysis.txt
+
+[x] ORM constraint: NO raw SQL concatenation
+      → Prisma parameterizes all inputs automatically
+      → $queryRaw uses tagged templates (safe) not $queryRawUnsafe (unsafe)
+
+================================================================================
+FILES SUBMITTED
+================================================================================
+
+1. features-specification.txt
+2. architecture.txt
+3. database-schema.txt
+4. openapi.yaml
+5. security-analysis.txt
+6. project-structure.txt
+7. CHECKLIST.txt (this file)

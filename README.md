@@ -13,7 +13,7 @@ The system allows users to create wedding registries, add gift items, and collec
 - **Gift Items**: Manage items with target amounts, priority, and status state machine (PENDING → FUNDED → PURCHASED → DELIVERED).
 - **Contributions**: Pool-funding logic with atomic transactions, exchange rate locking, and kinship tier suggestions.
 - **Family Tree**: Manage family members with relationship types and kinship tiers.
-- **Background Jobs**: Asynchronous email sending (BullMQ + Redis) and scheduled cleanup tasks.
+- **Background Jobs**: Asynchronous email sending and scheduled cleanup tasks.
 - **Audit Logs**: Track key actions in the system.
 - **API Documentation**: Swagger UI available at `/api/docs`.
 
@@ -23,7 +23,7 @@ The system allows users to create wedding registries, add gift items, and collec
 - **ORM**: Prisma with PostgreSQL for schema-first migrations and type-safe DB access.
 - **Authentication**:
   - JWT access tokens (short-lived) and refresh tokens (long-lived, stored in DB).
-  - Email verification on signup (via Nodemailer + BullMQ queue).
+  - Email verification on signup (via Nodemailer).
   - Password reset via email link.
   - Token versioning for secure logout (invalidates all refresh tokens).
 - **Validation**: `Zod` for request body validation and standardized error responses.
@@ -31,14 +31,13 @@ The system allows users to create wedding registries, add gift items, and collec
   - `helmet` for secure headers.
   - CORS configured with allowlist origins.
   - Rate limiting on auth endpoints (`express-rate-limit`).
-- **Background Processing**: BullMQ with Redis for email queue and cleanup tasks.
+- **Background Processing**: Asynchronous email sending and cleanup tasks.
 - **Testing**: Jest + Supertest for integration tests.
 
 ## Prerequisites
 
 - Node.js 18+
 - PostgreSQL 15+
-- Redis (optional, for background jobs)
 - Docker / Docker Compose (optional)
 
 ## Local setup
@@ -52,7 +51,7 @@ The system allows users to create wedding registries, add gift items, and collec
    ```bash
    npm install
    ```
-4. Start infrastructure (PostgreSQL and Redis) using Docker:
+4. Start infrastructure (PostgreSQL) using Docker or your local database:
    ```bash
    docker-compose up -d
    ```
@@ -99,7 +98,6 @@ See `.env.example` for a full list of required environment variables. Key variab
 - `DATABASE_URL`: PostgreSQL connection string.
 - `JWT_ACCESS_SECRET`: Secret key for signing JWT tokens.
 - `SMTP_*`: Settings for the email service (Nodemailer).
-- `REDIS_URL`: Connection string for Redis (used by BullMQ).
 
 ## Project Structure
 
@@ -110,7 +108,7 @@ src/
   lib/             # Utilities (Prisma client, Email service)
   middleware/       # Auth, Rate limiting
   routes/           # API route handlers
-  workers/          # Background job workers (BullMQ)
+  workers/          # Background job workers
 tests/             # Jest integration tests
 prisma/            # Schema and migrations
 blueprint/         # OpenAPI spec and project docs

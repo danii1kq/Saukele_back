@@ -14,10 +14,10 @@ const transporter = nodemailer.createTransport({
 
 /**
  * Отправляет email напрямую или логирует, если настройки не указаны.
- * Для студенческого уровня: упрощенная версия без Redis/BullMQ.
+ * Упрощенная версия без фоновой очереди.
  */
 async function sendEmailAsync({ to, subject, text, html }) {
-  if (!config.smtpUser || !config.smtpPass) {
+  if (process.env.NODE_ENV === 'test' || !config.smtpUser || !config.smtpPass) {
     console.log(`[MOCK EMAIL] To: ${to}, Subject: ${subject}, Body: ${text || html}`);
     return { mock: true, message: "Email logging only (no SMTP config)" };
   }
@@ -39,10 +39,10 @@ async function sendEmailAsync({ to, subject, text, html }) {
 }
 
 /**
- * Заглушка для совместимости (воркер не запускается без Redis)
+ * Заглушка для совместимости: фоновая обработка очереди не используется.
  */
 function processEmailQueue() {
-  console.log("Email queue processing is disabled (Redis not required for basic mode).");
+  console.log("Email queue processing is disabled.");
 }
 
 module.exports = { transporter, sendEmailAsync, processEmailQueue };

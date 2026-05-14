@@ -26,7 +26,4 @@ module.exports = {
   smtpUser: process.env.SMTP_USER || "",
   smtpPass: process.env.SMTP_PASS || "",
   emailFrom: process.env.EMAIL_FROM || "noreply@saukele.kz",
-
-  // Redis (BullMQ)
-  redisUrl: process.env.REDIS_URL || "redis://localhost:6379",
 };

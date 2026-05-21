@@ -10,6 +10,15 @@ describe("Contribution business flow", () => {
   const adminEmail = `admin+${Date.now()}@example.com`;
 
   beforeAll(async () => {
+    // Create necessary exchange rate for tests
+    await prisma.exchangeRateSnapshot.create({
+      data: {
+        fromCurrency: "EUR",
+        toCurrency: "KZT",
+        rate: "450.50",
+      }
+    });
+
     await request(app).post("/api/auth/register").send({
       email: adminEmail,
       name: "Admin User",

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Saukele - Login</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1><a href="index.html" style="text-decoration:none; color:inherit;">Saukele</a></h1>
+        <nav id="navMenu">
+            <a href="register.html">Register</a>
+        </nav>
+    </header>
+
+    <div class="container">
+        <h2>Login</h2>
+        <div id="notification" class="notification"></div>
+        <form id="loginForm" onsubmit="handleLogin(event)">
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" required>
+            </div>
+            <button type="submit" class="btn">Login</button>
+            <button type="button" class="btn btn-secondary" onclick="handleForgotPassword()">Forgot Password</button>
+        </form>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

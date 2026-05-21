@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Saukele App</title>
+    <script>
+        // Redirect to dashboard if logged in, else login
+        if (localStorage.getItem('accessToken')) {
+            window.location.href = 'dashboard.html';
+        } else {
+            window.location.href = 'login.html';
+        }
+    </script>
+</head>
+<body>
+    <p>Redirecting to the app...</p>
+</body>
+</html>
+
+    <div class="section">
+        <h3>API Console</h3>
+        <pre id="apiOutput">Results will appear here...</pre>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

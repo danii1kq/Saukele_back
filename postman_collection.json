@@ -239,6 +239,207 @@
       ]
     },
     {
+      "name": "Auth / Logout",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/auth/logout",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "auth",
+            "logout"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "const refreshToken = pm.collectionVariables.get('refreshToken') || pm.environment.get('refreshToken');",
+              "if (!refreshToken || refreshToken.length < 10) {",
+              "  throw new Error('refreshToken is missing. Run login/register first so the token is saved.');",
+              "}",
+              "pm.variables.set('refreshToken', refreshToken);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Logged out message', () => {",
+              "  pm.expect(pm.response.json().message).to.eql('Logged out successfully');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth / Verify Email",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/auth/verify-email?token={{verificationToken}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "auth",
+            "verify-email"
+          ],
+          "query": [
+            {
+              "key": "token",
+              "value": "{{verificationToken}}"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Email verified message returned', () => {",
+              "  pm.expect(pm.response.json().message).to.eql('Email verified successfully. You can now log in.');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth / Resend Verification",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{testEmail}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/auth/resend-verification",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "auth",
+            "resend-verification"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth / Forgot Password",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"tester@example.com\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/auth/forgot-password",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "auth",
+            "forgot-password"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Reset request accepted', () => {",
+              "  pm.expect(pm.response.json().message).to.be.a('string');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth / Reset Password",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"token\": \"{{resetToken}}\",\n  \"newPassword\": \"NewPass123\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/auth/reset-password",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "auth",
+            "reset-password"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Password reset message returned', () => {",
+              "  pm.expect(pm.response.json().message).to.eql('Password reset successful. You can now log in with your new password.');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "Registry / List Public",
       "request": {
         "method": "GET",
@@ -871,7 +1072,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"name\": \"Aunt Aida\",\n  \"relationshipType\": \"UNCLE_AUNT\",\n  \"kinshipTier\": \"EXTENDED\"\n}"
+          "raw": "{\n  \"relatedUserId\": 2,\n  \"name\": \"Aunt Aida\",\n  \"relationshipType\": \"UNCLE_AUNT\",\n  \"kinshipTier\": \"EXTENDED\"\n}"
         },
         "url": {
           "raw": "{{baseUrl}}/family-members",
@@ -893,6 +1094,50 @@
               "  const json = pm.response.json();",
               "  pm.expect(json.id).to.be.a('number');",
               "  pm.collectionVariables.set('familyMemberId', String(json.id));",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Family / Update Member",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"relationshipType\": \"FAMILY_FRIEND\",\n  \"kinshipTier\": \"EXTENDED\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/family-members/{{familyMemberId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "family-members",
+            "{{familyMemberId}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Family member updated', () => {",
+              "  const json = pm.response.json();",
+              "  pm.expect(json.id).to.be.a('number');",
               "});"
             ]
           }
@@ -1267,59 +1512,6 @@
       ]
     },
     {
-      "name": "Auth / Logout",
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
-        },
-        "url": {
-          "raw": "{{baseUrl}}/auth/logout",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "auth",
-            "logout"
-          ]
-        }
-      },
-      "event": [
-        {
-          "listen": "prerequest",
-          "script": {
-            "exec": [
-              "const refreshToken = pm.collectionVariables.get('refreshToken') || pm.environment.get('refreshToken');",
-              "if (!refreshToken || refreshToken.length < 10) {",
-              "  throw new Error('refreshToken is missing. Run login/register first so the token is saved.');",
-              "}",
-              "pm.variables.set('refreshToken', refreshToken);"
-            ]
-          }
-        },
-        {
-          "listen": "test",
-          "script": {
-            "exec": [
-              "pm.test('Status 200', () => pm.response.to.have.status(200));",
-              "pm.test('Logged out message', () => {",
-              "  pm.expect(pm.response.json().message).to.eql('Logged out successfully');",
-              "});"
-            ]
-          }
-        }
-      ]
-    }
-  ],
-  "variable": [
-    {
       "key": "baseUrl",
       "value": "http://localhost:4000/api",
       "type": "string"
@@ -1363,109 +1555,16 @@
       "key": "refreshToken",
       "value": "",
       "type": "string"
-    }
-  ],
-  "item": [
-    ...existing code...
-    ,
-    {
-      "name": "Family / Add Member",
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          },
-          {
-            "key": "Authorization",
-            "value": "Bearer {{accessToken}}"
-          }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"name\": \"My Spouse\",\n  \"relationshipType\": \"CHILD\",\n  \"kinshipTier\": \"CLOSE\"\n}"
-        },
-        "url": {
-          "raw": "{{baseUrl}}/family-members",
-          "host": ["{{baseUrl}}"],
-          "path": ["family-members"]
-        }
-      },
-      "event": [
-        {
-          "listen": "test",
-          "script": {
-            "exec": [
-              "pm.test('Status 201', () => pm.response.to.have.status(201));",
-              "pm.test('Member created', () => {",
-              "  const json = pm.response.json();",
-              "  pm.expect(json.id).to.be.a('number');",
-              "  pm.collectionVariables.set('familyMemberId', String(json.id));",
-              "});"
-            ]
-          }
-        }
-      ]
     },
     {
-      "name": "Family / List Members",
-      "request": {
-        "method": "GET",
-        "header": [
-          {
-            "key": "Authorization",
-            "value": "Bearer {{accessToken}}"
-          }
-        ],
-        "url": {
-          "raw": "{{baseUrl}}/family-members?take=50",
-          "host": ["{{baseUrl}}"],
-          "path": ["family-members"]
-        }
-      },
-      "event": [
-        {
-          "listen": "test",
-          "script": {
-            "exec": [
-              "pm.test('Status 200', () => pm.response.to.have.status(200));",
-              "pm.test('Returns data array', () => {",
-              "  pm.expect(pm.response.json().data).to.be.an('array');",
-              "});"
-            ]
-          }
-        }
-      ]
+      "key": "verificationToken",
+      "value": "",
+      "type": "string"
     },
     {
-      "name": "Family / Delete Member",
-      "request": {
-        "method": "DELETE",
-        "header": [
-          {
-            "key": "Authorization",
-            "value": "Bearer {{accessToken}}"
-          }
-        ],
-        "url": {
-          "raw": "{{baseUrl}}/family-members/{{familyMemberId}}",
-          "host": ["{{baseUrl}}"],
-          "path": ["family-members", "{{familyMemberId}}"]
-        }
-      },
-      "event": [
-        {
-          "listen": "test",
-          "script": {
-            "exec": [
-              "pm.test('Status 200 or 404', () => {",
-              "  pm.expect([200, 404]).to.include(pm.response.code);",
-              "});"
-            ]
-          }
-        }
-      ]
+      "key": "resetToken",
+      "value": "",
+      "type": "string"
     }
   ]
 }

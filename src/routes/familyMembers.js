@@ -33,8 +33,9 @@ function getKinshipSuggestion(kinshipTier) {
     CLOSE: 100000,
     EXTENDED: 50000,
     FRIEND: 20000,
+    ACQUAINTANCE: 10000,
   };
-  return suggested[kinshipTier] || 20000;
+  return suggested[kinshipTier] || 10000;
 }
 
 router.post("/family-members", requireAuth, requireRole("REGISTRANT", "ADMIN"), async (req, res, next) => {
@@ -111,6 +112,50 @@ router.delete("/family-members/:id", requireAuth, async (req, res, next) => {
   }
 });
 
+const familyMemberUpdateSchema = z.object({
+  relatedUserId: z.number().int().nullable().optional(),
+  name: z.string().min(1).optional(),
+  relationshipType: z.enum([
+    "PARENT",
+    "SIBLING",
+    "CHILD",
+    "COUSIN",
+    "UNCLE_AUNT",
+    "FAMILY_FRIEND",
+    "OTHER",
+  ]).optional(),
+  kinshipTier: z.enum(["CLOSE", "EXTENDED", "FRIEND"]).optional(),
+}).refine((data) => Object.keys(data).length > 0, {
+  message: "At least one field must be provided for update",
+});
+
+router.patch("/family-members/:id", requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const parsed = familyMemberUpdateSchema.parse(req.body);
+
+    const member = await prisma.familyMember.findUnique({ where: { id } });
+    if (!member) {
+      return res.status(404).json({ error: "Family member entry not found" });
+    }
+    if (member.userId !== req.user.id && req.user.role !== "ADMIN") {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const updated = await prisma.familyMember.update({
+      where: { id },
+      data: parsed,
+    });
+
+    res.json(updated);
+  } catch (error) {
+    if (error.name === "ZodError") {
+      return res.status(422).json({ error: "Validation failed", details: error.errors });
+    }
+    next(error);
+  }
+});
+
 router.get("/family-members/kinship-tier/:userId", requireAuth, async (req, res, next) => {
   try {
     const targetUserId = Number(req.params.userId);
@@ -156,7 +201,7 @@ router.get("/family-members/kinship-tier/:userId", requireAuth, async (req, res,
       queue.push(...(byUser.get(current.relatedUserId) || []));
     }
 
-    res.json({ kinshipTier: "FRIEND", suggestedMinimumKzt: getKinshipSuggestion("FRIEND") });
+    res.json({ kinshipTier: "ACQUAINTANCE", suggestedMinimumKzt: getKinshipSuggestion("ACQUAINTANCE") });
   } catch (error) {
     next(error);
   }

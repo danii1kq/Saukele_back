@@ -54,24 +54,25 @@ function parseContributionSort(sort) {
 
 async function buildKinshipSuggestion(contributorId, ownerId) {
   if (!contributorId) {
-    return { kinshipTier: "FRIEND", suggestedMinimumKzt: 20000 };
+    return { kinshipTier: "ACQUAINTANCE", suggestedMinimumKzt: 10000 };
   }
   const relation = await prisma.familyMember.findFirst({
     where: { userId: ownerId, relatedUserId: contributorId },
   });
   if (!relation) {
-    return { kinshipTier: "FRIEND", suggestedMinimumKzt: 20000 };
+    return { kinshipTier: "ACQUAINTANCE", suggestedMinimumKzt: 10000 };
   }
 
   const suggested = {
     CLOSE: 100000,
     EXTENDED: 50000,
     FRIEND: 20000,
+    ACQUAINTANCE: 10000,
   };
 
   return {
     kinshipTier: relation.kinshipTier,
-    suggestedMinimumKzt: suggested[relation.kinshipTier] || 20000,
+    suggestedMinimumKzt: suggested[relation.kinshipTier] || 10000,
   };
 }
 

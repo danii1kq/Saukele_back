@@ -472,12 +472,12 @@ components:
       properties:
         kinshipTier:
           type: string
-          enum: [CLOSE, EXTENDED, FRIEND]
+          enum: [CLOSE, EXTENDED, FRIEND, ACQUAINTANCE]
           nullable: true
-          example: EXTENDED
+          example: ACQUAINTANCE
         suggestedMinKzt:
           type: integer
-          example: 20000
+          example: 10000
 
     ExchangeRateSnapshotResponse:
       type: object

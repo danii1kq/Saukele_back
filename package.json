@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "start": "node src/app.js",
-    "dev": "nodemon src/app.js",
+    "dev:backend": "nodemon src/app.js",
+    "dev:frontend": "http-server frontend -p 8080 -P http://localhost:3000?",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "migrate": "npx prisma migrate dev",
     "seed": "node prisma/seed.js",
     "test": "jest --runInBand",
@@ -27,7 +29,9 @@
     "zod": "^3.23.2"
   },
   "devDependencies": {
+    "concurrently": "^9.2.1",
     "eslint": "^8.57.0",
+    "http-server": "^14.1.1",
     "jest": "^29.7.0",
     "nodemon": "^3.0.1",
     "prisma": "^6.19.3",

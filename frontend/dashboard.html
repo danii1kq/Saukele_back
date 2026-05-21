@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Saukele - Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .hidden { display: none !important; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
+        .list-item { background: #fff; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px; }
+    </style>
+</head>
+<body onload="initDashboard()">
+    <header>
+        <h1><a href="index.html" style="text-decoration:none; color:inherit;">Saukele</a></h1>
+        <nav id="navMenu">
+            <span id="currentUser" style="margin-right: 15px; color:#2c3e50; font-weight:bold;"></span>
+            <button id="btnLogout" onclick="logout()">Logout</button>
+        </nav>
+    </header>
+
+    <div class="container">
+        <div id="notification" class="notification"></div>
+        
+        <div class="grid">
+            <!-- Registries -->
+            <div class="card">
+                <h2>My Registries</h2>
+                <div id="registriesList">Loading...</div>
+                <hr>
+                <h3>Create Registry</h3>
+                <form onsubmit="handleCreateRegistry(event)">
+                    <input type="text" id="regTitle" placeholder="Title (e.g., Ami & Dani Wedding)" required>
+                    <input type="text" id="regCouple" placeholder="Couple Name (e.g., Ami & Dani)" required>
+                    <input type="date" id="regDate" required>
+                    <select id="regPublic">
+                        <option value="true">Public</option>
+                        <option value="false">Private</option>
+                    </select>
+                    <button type="submit" class="btn" style="margin-top:10px;">Create</button>
+                </form>
+            </div>
+
+            <!-- Family Members -->
+            <div class="card">
+                <h2>Family Members</h2>
+                <div id="familyList">Loading...</div>
+                <hr>
+                <h3>Add Relative</h3>
+                <form onsubmit="handleAddFamily(event)">
+                    <input type="text" id="famName" placeholder="Name" required>
+                    <select id="famRelation" required>
+                        <option value="PARENT">Parent</option>
+                        <option value="SIBLING">Sibling</option>
+                        <option value="CHILD">Child</option>
+                        <option value="COUSIN">Cousin</option>
+                        <option value="UNCLE_AUNT">Uncle/Aunt</option>
+                        <option value="FAMILY_FRIEND">Family Friend</option>
+                        <option value="OTHER">Other</option>
+                    </select>
+                    <select id="famTier" required>
+                        <option value="CLOSE">CLOSE</option>
+                        <option value="EXTENDED">EXTENDED</option>
+                        <option value="FRIEND">FRIEND</option>
+                    </select>
+                    <button type="submit" class="btn" style="margin-top:10px;">Add Relative</button>
+                </form>
+            </div>
+
+            <!-- Gifts (General overview to demonstrate) -->
+            <div class="card" style="grid-column: 1 / -1;">
+                <h2>Registry Gifts & Contributions</h2>
+                <input type="number" id="giftRegId" placeholder="Registry ID to manage gifts" style="display:inline-block; width:200px;">
+                <button onclick="loadGiftsForRegistry()" class="btn" style="display:inline-block; width:100px;">Load Gifts</button>
+                
+                <div id="giftsList" style="margin-top:15px; border-top: 1px solid #ccc; padding-top: 15px;">
+                    Enter a Registry ID above to view its gifts.
+                </div>
+
+                <div style="margin-top:15px; border-top: 1px solid #ccc; padding-top: 15px;">
+                    <h3>Add Gift to Registry</h3>
+                    <form onsubmit="handleAddGift(event)">
+                        <input type="text" id="giftTitle" placeholder="Title (e.g., Fridge)" required>
+                        <input type="text" id="giftDesc" placeholder="Description">
+                        <input type="number" step="0.01" id="giftPriceKzt" placeholder="Target Amount (KZT)" required>
+                        <select id="giftPrivacy">
+                            <option value="PUBLIC">Public</option>
+                            <option value="FAMILY_ONLY">Family Only</option>
+                            <option value="PRIVATE">Private</option>
+                        </select>
+                        <button type="submit" class="btn" style="margin-top:10px;">Add Gift</button>
+                    </form>
+                </div>
+
+                <div style="margin-top:15px; border-top: 1px solid #ccc; padding-top: 15px;">
+                    <h3>Contribute to a Gift</h3>
+                    <form onsubmit="handleContribute(event)">
+                        <input type="number" id="contribGiftId" placeholder="Gift ID" required>
+                        <input type="number" step="0.01" id="contribAmount" placeholder="Amount" required>
+                        <input type="text" id="contribCurrency" placeholder="Currency (KZT or EUR)" value="KZT" required>
+                        <input type="text" id="contribName" placeholder="Your Name" required>
+                        <button type="submit" class="btn" style="margin-top:10px;">Contribute</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

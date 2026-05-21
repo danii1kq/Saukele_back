@@ -32,6 +32,10 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+const resendVerificationSchema = z.object({
+  email: z.string().email(),
+});
+
 const refreshSchema = z.object({
   refreshToken: z.string().min(10),
 });
@@ -138,6 +142,54 @@ router.post("/register", authLimiter, async (req, res, next) => {
   }
 });
 
+// Переотправка письма верификации
+router.post("/resend-verification", authLimiter, async (req, res, next) => {
+  try {
+    const { email } = resendVerificationSchema.parse(req.body);
+
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    if (user.isVerified) {
+      return res.status(400).json({ error: "User is already verified" });
+    }
+
+    const verifyToken = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24ч
+
+    // Удаляем предыдущие токены верификации для этого юзера (опционально)
+    await prisma.verificationToken.deleteMany({
+      where: { userId: user.id },
+    });
+
+    await prisma.verificationToken.create({
+      data: {
+        token: verifyToken,
+        userId: user.id,
+        expiresAt,
+      },
+    });
+
+    const verifyLink = `${config.baseUrl}/auth/verify-email?token=${verifyToken}`;
+    
+    // Асинхронно отправляем письмо
+    sendEmailAsync({
+      to: user.email,
+      subject: "Подтверждение Email (повторно)",
+      text: `Перейдите по ссылке для подтверждения email: ${verifyLink}`,
+      html: `<p>Здравствуйте!</p><p>Перейдите по ссылке для подтверждения email:</p><a href="${verifyLink}">${verifyLink}</a>`,
+    });
+
+    res.json({ message: "Verification email sent successfully." });
+  } catch (error) {
+    if (error.name === "ZodError") {
+      return res.status(422).json({ error: "Validation failed", details: error.errors });
+    }
+    next(error);
+  }
+});
+
 // Верификация email
 router.get("/verify-email", async (req, res, next) => {
   try {
@@ -176,8 +228,9 @@ router.post("/forgot-password", authLimiter, async (req, res, next) => {
     const { email } = forgotPasswordSchema.parse(req.body);
 
     const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
-      // Не сообщаем, что пользователь не найден (защита от перебора)
+    if (!user || !user.isVerified) {
+      // Не сообщаем, что пользователь не найден или не подтвержден,
+      // чтобы не раскрывать статус учетной записи.
       return res.json({ message: "If your email is registered, you will receive a password reset link." });
     }
 

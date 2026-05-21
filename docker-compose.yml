@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: ${DB_USER:-saukele_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-Saukele123!}
+      POSTGRES_DB: ${DB_NAME:-saukele_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  backend:
+    build: .
+    ports:
+      - "${BACKEND_PORT:-3000}:3000"
+    environment:
+      - DATABASE_URL=postgresql://${DB_USER:-saukele_user}:${DB_PASSWORD:-Saukele123!}@db:5432/${DB_NAME:-saukele_db}?schema=public
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-default_secret_key_12345}
+      - JWT_REFRESH_SECRET_KEY=${JWT_REFRESH_SECRET_KEY:-default_refresh_secret_key_67890}
+      - EMAIL_API_KEY=${EMAIL_API_KEY}
+      - EMAIL_FROM_ADDRESS=${EMAIL_FROM_ADDRESS}
+      - FRONTEND_URL=http://localhost:${FRONTEND_PORT:-8080}
+      - BASE_URL=http://localhost:${BACKEND_PORT:-3000}/api
+      - PORT=3000
+    depends_on:
+      - db
+      - redis
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  redis_data:

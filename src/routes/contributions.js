@@ -5,6 +5,7 @@ const { Prisma } = require("@prisma/client");
 const prisma = require("../lib/prisma");
 const { requireAuth } = require("../middleware/auth");
 const { accessTokenSecret } = require("../config/config");
+const { recordAudit } = require("../lib/audit");
 
 const router = express.Router();
 
@@ -135,14 +136,28 @@ router.post("/items/:itemId/contributions", async (req, res, next) => {
         },
       });
 
-      await tx.auditLog.create({
-        data: {
-          userId: contributorId || null,
-          action: "CONTRIBUTION_CREATED",
-          resourceType: "GiftItem",
-          resourceId: giftItem.id,
-          oldValues: { currentAmountKzt: giftItem.currentAmountKzt.toString() },
-          newValues: { currentAmountKzt: updatedGift.currentAmountKzt.toString(), status: updatedGift.status },
+      await recordAudit(tx, {
+        req,
+        userId: contributorId || null,
+        action: "CONTRIBUTION_CREATED",
+        resourceType: "Contribution",
+        resourceId: created.id,
+        newValues: created,
+      });
+
+      await recordAudit(tx, {
+        req,
+        userId: contributorId || null,
+        action: "GIFT_ITEM_UPDATED",
+        resourceType: "GiftItem",
+        resourceId: giftItem.id,
+        oldValues: {
+          currentAmountKzt: giftItem.currentAmountKzt,
+          status: giftItem.status,
+        },
+        newValues: {
+          currentAmountKzt: updatedGift.currentAmountKzt,
+          status: updatedGift.status,
         },
       });
 

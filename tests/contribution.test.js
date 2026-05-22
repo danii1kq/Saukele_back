@@ -16,6 +16,7 @@ describe("Contribution business flow", () => {
         fromCurrency: "EUR",
         toCurrency: "KZT",
         rate: "450.50",
+        source: "test-fixture",
       }
     });
 

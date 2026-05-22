@@ -2,6 +2,7 @@ const express = require("express");
 const { z } = require("zod");
 const prisma = require("../lib/prisma");
 const { requireAuth, requireRole } = require("../middleware/auth");
+const { recordAudit } = require("../lib/audit");
 
 const router = express.Router();
 
@@ -57,6 +58,15 @@ router.post("/family-members", requireAuth, requireRole("REGISTRANT", "ADMIN"), 
         kinshipTier: kinshipTier,
       },
     });
+
+    await recordAudit(prisma, {
+      req,
+      action: "FAMILY_MEMBER_CREATED",
+      resourceType: "FamilyMember",
+      resourceId: created.id,
+      newValues: created,
+    });
+
     res.status(201).json(created);
   } catch (error) {
     if (error.name === "ZodError") {
@@ -106,6 +116,14 @@ router.delete("/family-members/:id", requireAuth, async (req, res, next) => {
     }
 
     await prisma.familyMember.delete({ where: { id } });
+    await recordAudit(prisma, {
+      req,
+      action: "FAMILY_MEMBER_DELETED",
+      resourceType: "FamilyMember",
+      resourceId: id,
+      oldValues: member,
+    });
+
     res.status(204).send();
   } catch (error) {
     next(error);
@@ -145,6 +163,15 @@ router.patch("/family-members/:id", requireAuth, async (req, res, next) => {
     const updated = await prisma.familyMember.update({
       where: { id },
       data: parsed,
+    });
+
+    await recordAudit(prisma, {
+      req,
+      action: "FAMILY_MEMBER_UPDATED",
+      resourceType: "FamilyMember",
+      resourceId: id,
+      oldValues: member,
+      newValues: updated,
     });
 
     res.json(updated);

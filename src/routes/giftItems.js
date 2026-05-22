@@ -2,6 +2,7 @@ const express = require("express");
 const { z } = require("zod");
 const prisma = require("../lib/prisma");
 const { requireAuth, requireRole } = require("../middleware/auth");
+const { recordAudit } = require("../lib/audit");
 
 const router = express.Router();
 
@@ -81,6 +82,14 @@ router.post("/registries/:registryId/items", requireAuth, requireRole("REGISTRAN
         lockedAt: new Date(),
         priority: parsed.priority,
       },
+    });
+
+    await recordAudit(prisma, {
+      req,
+      action: "GIFT_ITEM_CREATED",
+      resourceType: "GiftItem",
+      resourceId: item.id,
+      newValues: item,
     });
 
     res.status(201).json(item);
@@ -186,6 +195,15 @@ router.put("/registries/:registryId/items/:itemId", requireAuth, async (req, res
       },
     });
 
+    await recordAudit(prisma, {
+      req,
+      action: "GIFT_ITEM_UPDATED",
+      resourceType: "GiftItem",
+      resourceId: itemId,
+      oldValues: item,
+      newValues: updated,
+    });
+
     res.json(updated);
   } catch (error) {
     if (error.name === "ZodError") {
@@ -216,6 +234,15 @@ router.delete("/registries/:registryId/items/:itemId", requireAuth, async (req, 
     }
 
     await prisma.giftItem.delete({ where: { id: itemId } });
+
+    await recordAudit(prisma, {
+      req,
+      action: "GIFT_ITEM_DELETED",
+      resourceType: "GiftItem",
+      resourceId: itemId,
+      oldValues: item,
+    });
+
     res.status(204).send();
   } catch (error) {
     next(error);
@@ -269,6 +296,15 @@ router.patch("/registries/:registryId/items/:itemId/status", requireAuth, async 
     const updated = await prisma.giftItem.update({
       where: { id: itemId },
       data: { status: requestedStatus },
+    });
+
+    await recordAudit(prisma, {
+      req,
+      action: "GIFT_ITEM_STATUS_CHANGED",
+      resourceType: "GiftItem",
+      resourceId: itemId,
+      oldValues: { status: currentStatus },
+      newValues: { status: updated.status },
     });
 
     res.json(updated);

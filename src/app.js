@@ -14,6 +14,15 @@ const adminRoutes = require("./routes/admin");
 
 const app = express();
 
+function isLocalDevOrigin(origin) {
+  try {
+    const parsed = new URL(origin);
+    return parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+  } catch {
+    return false;
+  }
+}
+
 app.use(helmet());
 app.use(
   cors({
@@ -22,6 +31,9 @@ app.use(
         return callback(null, true);
       }
       if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      if (process.env.NODE_ENV !== "production" && isLocalDevOrigin(origin)) {
         return callback(null, true);
       }
       return callback(new Error("CORS origin denied"));

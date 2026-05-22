@@ -2,6 +2,7 @@ const express = require("express");
 const { z } = require("zod");
 const prisma = require("../lib/prisma");
 const { requireAuth, requireRole } = require("../middleware/auth");
+const { recordAudit } = require("../lib/audit");
 
 const router = express.Router();
 
@@ -133,6 +134,20 @@ router.delete("/users/:id", requireAuth, requireRole("ADMIN"), async (req, res, 
       },
     });
 
+    await recordAudit(prisma, {
+      req,
+      action: "USER_ANONYMIZED",
+      resourceType: "User",
+      resourceId: id,
+      oldValues: user,
+      newValues: {
+        email: `deleted+${id}@example.com`,
+        name: "Deleted user",
+        role: "GUEST",
+        provider: "local",
+      },
+    });
+
     res.json({ id, message: "User anonymized and disabled" });
   } catch (error) {
     next(error);
@@ -188,6 +203,16 @@ router.patch("/users/:id/role", requireAuth, requireRole("ADMIN"), async (req, r
         updatedAt: true,
       },
     });
+
+    await recordAudit(prisma, {
+      req,
+      action: "USER_ROLE_CHANGED",
+      resourceType: "User",
+      resourceId: id,
+      oldValues: { role: user.role },
+      newValues: { role: updated.role },
+    });
+
     res.json(updated);
   } catch (error) {
     if (error.name === "ZodError") {
@@ -244,6 +269,14 @@ router.patch("/exchange-rates", requireAuth, requireRole("ADMIN"), async (req, r
         rate: parsed.rate,
         source: parsed.source,
       },
+    });
+
+    await recordAudit(prisma, {
+      req,
+      action: "EXCHANGE_RATE_CREATED",
+      resourceType: "ExchangeRateSnapshot",
+      resourceId: snapshot.id,
+      newValues: snapshot,
     });
 
     res.json(snapshot);

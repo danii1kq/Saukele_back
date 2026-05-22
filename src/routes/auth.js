@@ -7,6 +7,7 @@ const prisma = require("../lib/prisma");
 const { authLimiter } = require("../middleware/rateLimit");
 const { requireAuth } = require("../middleware/auth");
 const { sendEmailAsync } = require("../lib/email");
+const { recordAudit } = require("../lib/audit");
 const config = require("../config/config");
 
 const {
@@ -53,6 +54,11 @@ const resetPasswordSchema = z.object({
   newPassword: z.string().min(8).regex(/^(?=.*\d).+$/),
 });
 
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8).regex(/^(?=.*\d).+$/),
+});
+
 // Вспомогательные функции
 function signAccessToken(user) {
   return jwt.sign({ sub: String(user.id), role: user.role, ver: user.tokenVersion }, accessTokenSecret, {
@@ -96,23 +102,34 @@ router.post("/register", authLimiter, async (req, res, next) => {
     const parsed = registerSchema.parse(req.body);
     const passwordHash = await bcrypt.hash(parsed.password, bcryptSaltRounds);
 
-    const user = await prisma.user.create({
-      data: {
-        email: parsed.email,
-        name: parsed.name,
-        passwordHash,
-        isVerified: false, // По умолчанию не подтвержден
-      },
-    });
+    const { user, verificationToken } = await prisma.$transaction(async (tx) => {
+      const createdUser = await tx.user.create({
+        data: {
+          email: parsed.email,
+          name: parsed.name,
+          passwordHash,
+          isVerified: false,
+        },
+      });
 
-    // Создаем токен верификации
-    const verificationToken = crypto.randomBytes(32).toString("hex");
-    await prisma.verificationToken.create({
-      data: {
-        userId: user.id,
-        token: verificationToken,
-        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 часа
-      },
+      const createdVerificationToken = crypto.randomBytes(32).toString("hex");
+      await tx.verificationToken.create({
+        data: {
+          userId: createdUser.id,
+          token: createdVerificationToken,
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        },
+      });
+
+      await recordAudit(tx, {
+        req,
+        action: "USER_CREATED",
+        resourceType: "User",
+        resourceId: createdUser.id,
+        newValues: createdUser,
+      });
+
+      return { user: createdUser, verificationToken: createdVerificationToken };
     });
 
     // Отправляем письмо асинхронно через очередь
@@ -159,7 +176,7 @@ router.post("/resend-verification", authLimiter, async (req, res, next) => {
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24ч
 
     // Удаляем предыдущие токены верификации для этого юзера (опционально)
-    await prisma.verificationToken.deleteMany({
+    const deletedTokens = await prisma.verificationToken.deleteMany({
       where: { userId: user.id },
     });
 
@@ -169,6 +186,15 @@ router.post("/resend-verification", authLimiter, async (req, res, next) => {
         userId: user.id,
         expiresAt,
       },
+    });
+
+    await recordAudit(prisma, {
+      req,
+      action: "VERIFICATION_EMAIL_RESENT",
+      resourceType: "User",
+      resourceId: user.id,
+      oldValues: { previousTokensDeleted: deletedTokens.count },
+      newValues: { expiresAt },
     });
 
     const verifyLink = `${config.baseUrl}/auth/verify-email?token=${verifyToken}`;
@@ -213,6 +239,15 @@ router.get("/verify-email", async (req, res, next) => {
     // Удаляем использованный токен
     await prisma.verificationToken.delete({ where: { id: storedToken.id } });
 
+    await recordAudit(prisma, {
+      req,
+      action: "EMAIL_VERIFIED",
+      resourceType: "User",
+      resourceId: storedToken.userId,
+      oldValues: { isVerified: false },
+      newValues: { isVerified: true },
+    });
+
     res.json({ message: "Email verified successfully. You can now log in." });
   } catch (error) {
     if (error.name === "ZodError") {
@@ -242,6 +277,14 @@ router.post("/forgot-password", authLimiter, async (req, res, next) => {
         token: resetToken,
         expiresAt: new Date(Date.now() + 1 * 60 * 60 * 1000), // 1 час
       },
+    });
+
+    await recordAudit(prisma, {
+      req,
+      action: "PASSWORD_RESET_REQUESTED",
+      resourceType: "User",
+      resourceId: user.id,
+      newValues: { expiresAt: new Date(Date.now() + 1 * 60 * 60 * 1000) },
     });
 
     const resetLink = `${req.protocol}://${req.get("host")}/api/auth/reset-password?token=${resetToken}`;
@@ -288,7 +331,61 @@ router.post("/reset-password", authLimiter, async (req, res, next) => {
       }),
     ]);
 
+    await recordAudit(prisma, {
+      req,
+      action: "PASSWORD_RESET_COMPLETED",
+      resourceType: "User",
+      resourceId: storedToken.userId,
+      oldValues: { passwordHash: "[redacted]" },
+      newValues: { passwordHash: "[updated]" },
+    });
+
     res.json({ message: "Password reset successful. You can now log in with your new password." });
+  } catch (error) {
+    if (error.name === "ZodError") {
+      return res.status(422).json({ error: "Validation failed", details: error.errors });
+    }
+    next(error);
+  }
+});
+
+// Смена пароля из профиля
+router.post("/change-password", requireAuth, authLimiter, async (req, res, next) => {
+  try {
+    const { currentPassword, newPassword } = changePasswordSchema.parse(req.body);
+
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const isValid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!isValid) {
+      return res.status(401).json({ error: "Current password is incorrect" });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, bcryptSaltRounds);
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: user.id },
+        data: {
+          passwordHash,
+          tokenVersion: { increment: 1 },
+        },
+      }),
+      prisma.refreshToken.deleteMany({ where: { userId: user.id } }),
+    ]);
+
+    await recordAudit(prisma, {
+      req,
+      action: "PASSWORD_CHANGED",
+      resourceType: "User",
+      resourceId: user.id,
+      oldValues: { tokenVersion: user.tokenVersion },
+      newValues: { tokenVersion: user.tokenVersion + 1 },
+    });
+
+    res.json({ message: "Password changed successfully" });
   } catch (error) {
     if (error.name === "ZodError") {
       return res.status(422).json({ error: "Validation failed", details: error.errors });
@@ -312,6 +409,16 @@ router.post("/login", authLimiter, async (req, res, next) => {
     }
 
     const tokens = await issueAuthTokens(user);
+
+    await recordAudit(prisma, {
+      req,
+      userId: user.id,
+      action: "LOGIN_SUCCESS",
+      resourceType: "User",
+      resourceId: user.id,
+      newValues: { refreshTokenIssued: true },
+    });
+
     res.json({
       message: "Login successful",
       accessToken: tokens.accessToken,
@@ -372,6 +479,16 @@ router.post("/logout", async (req, res, next) => {
         data: { tokenVersion: { increment: 1 } },
       }),
     ]);
+
+    await recordAudit(prisma, {
+      req,
+      userId: stored.userId,
+      action: "LOGOUT",
+      resourceType: "User",
+      resourceId: stored.userId,
+      oldValues: { tokenVersion: stored.user.tokenVersion },
+      newValues: { tokenVersion: stored.user.tokenVersion + 1 },
+    });
 
     res.json({ message: "Logged out successfully" });
   } catch (error) {

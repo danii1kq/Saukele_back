@@ -4,109 +4,195 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Saukele - Dashboard</title>
-    <link rel="stylesheet" href="style.css">
-    <style>
-        .hidden { display: none !important; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
-        .list-item { background: #fff; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px; }
-    </style>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
 </head>
-<body onload="initDashboard()">
-    <header>
-        <h1><a href="index.html" style="text-decoration:none; color:inherit;">Saukele</a></h1>
-        <nav id="navMenu">
-            <span id="currentUser" style="margin-right: 15px; color:#2c3e50; font-weight:bold;"></span>
-            <button id="btnLogout" onclick="logout()">Logout</button>
-        </nav>
+<body class="bg-light">
+    <header class="border-bottom bg-white sticky-top shadow-sm">
+        <div class="container py-3 d-flex flex-wrap align-items-center justify-content-between gap-3">
+            <div class="d-flex align-items-center gap-3">
+                <a class="text-decoration-none fw-bold fs-4 text-dark" href="index.html">Saukele</a>
+                <span id="roleBadge" class="badge text-bg-secondary">GUEST</span>
+            </div>
+            <nav id="navMenu" class="d-flex flex-wrap align-items-center gap-2">
+                <a id="linkHome" class="btn btn-outline-secondary btn-sm" href="index.html">Home</a>
+                <a id="linkDashboard" class="btn btn-outline-secondary btn-sm" href="dashboard.html">Dashboard</a>
+                <a id="linkProfile" class="btn btn-outline-secondary btn-sm" href="#profile">Profile</a>
+                <a id="linkRegistrant" class="btn btn-outline-secondary btn-sm d-none" href="#registrant">Registrant Create</a>
+                <a id="linkAdmin" class="btn btn-outline-secondary btn-sm d-none" href="#admin">Admin</a>
+                <a id="linkLogin" class="btn btn-primary btn-sm" href="login.html">Login</a>
+                <a id="linkRegister" class="btn btn-outline-primary btn-sm" href="register.html">Register</a>
+                <button id="btnLogout" class="btn btn-outline-danger btn-sm d-none" type="button" onclick="logout()">Logout</button>
+                <span id="currentUser" class="text-secondary small"></span>
+            </nav>
+        </div>
     </header>
 
-    <div class="container">
-        <div id="notification" class="notification"></div>
-        
-        <div class="grid">
-            <!-- Registries -->
-            <div class="card">
-                <h2>My Registries</h2>
-                <div id="registriesList">Loading...</div>
-                <hr>
-                <h3>Create Registry</h3>
-                <form onsubmit="handleCreateRegistry(event)">
-                    <input type="text" id="regTitle" placeholder="Title (e.g., Ami & Dani Wedding)" required>
-                    <input type="text" id="regCouple" placeholder="Couple Name (e.g., Ami & Dani)" required>
-                    <input type="date" id="regDate" required>
-                    <select id="regPublic">
-                        <option value="true">Public</option>
-                        <option value="false">Private</option>
-                    </select>
-                    <button type="submit" class="btn" style="margin-top:10px;">Create</button>
-                </form>
-            </div>
+    <main class="container py-4" id="dashboardWorkspace">
+        <div id="notification" class="alert d-none" role="alert"></div>
 
-            <!-- Family Members -->
-            <div class="card">
-                <h2>Family Members</h2>
-                <div id="familyList">Loading...</div>
-                <hr>
-                <h3>Add Relative</h3>
-                <form onsubmit="handleAddFamily(event)">
-                    <input type="text" id="famName" placeholder="Name" required>
-                    <select id="famRelation" required>
-                        <option value="PARENT">Parent</option>
-                        <option value="SIBLING">Sibling</option>
-                        <option value="CHILD">Child</option>
-                        <option value="COUSIN">Cousin</option>
-                        <option value="UNCLE_AUNT">Uncle/Aunt</option>
-                        <option value="FAMILY_FRIEND">Family Friend</option>
-                        <option value="OTHER">Other</option>
-                    </select>
-                    <select id="famTier" required>
-                        <option value="CLOSE">CLOSE</option>
-                        <option value="EXTENDED">EXTENDED</option>
-                        <option value="FRIEND">FRIEND</option>
-                    </select>
-                    <button type="submit" class="btn" style="margin-top:10px;">Add Relative</button>
-                </form>
-            </div>
-
-            <!-- Gifts (General overview to demonstrate) -->
-            <div class="card" style="grid-column: 1 / -1;">
-                <h2>Registry Gifts & Contributions</h2>
-                <input type="number" id="giftRegId" placeholder="Registry ID to manage gifts" style="display:inline-block; width:200px;">
-                <button onclick="loadGiftsForRegistry()" class="btn" style="display:inline-block; width:100px;">Load Gifts</button>
-                
-                <div id="giftsList" style="margin-top:15px; border-top: 1px solid #ccc; padding-top: 15px;">
-                    Enter a Registry ID above to view its gifts.
-                </div>
-
-                <div style="margin-top:15px; border-top: 1px solid #ccc; padding-top: 15px;">
-                    <h3>Add Gift to Registry</h3>
-                    <form onsubmit="handleAddGift(event)">
-                        <input type="text" id="giftTitle" placeholder="Title (e.g., Fridge)" required>
-                        <input type="text" id="giftDesc" placeholder="Description">
-                        <input type="number" step="0.01" id="giftPriceKzt" placeholder="Target Amount (KZT)" required>
-                        <select id="giftPrivacy">
-                            <option value="PUBLIC">Public</option>
-                            <option value="FAMILY_ONLY">Family Only</option>
-                            <option value="PRIVATE">Private</option>
-                        </select>
-                        <button type="submit" class="btn" style="margin-top:10px;">Add Gift</button>
-                    </form>
-                </div>
-
-                <div style="margin-top:15px; border-top: 1px solid #ccc; padding-top: 15px;">
-                    <h3>Contribute to a Gift</h3>
-                    <form onsubmit="handleContribute(event)">
-                        <input type="number" id="contribGiftId" placeholder="Gift ID" required>
-                        <input type="number" step="0.01" id="contribAmount" placeholder="Amount" required>
-                        <input type="text" id="contribCurrency" placeholder="Currency (KZT or EUR)" value="KZT" required>
-                        <input type="text" id="contribName" placeholder="Your Name" required>
-                        <button type="submit" class="btn" style="margin-top:10px;">Contribute</button>
-                    </form>
+        <section id="profile" class="mb-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="mb-3">
+                        <h2 class="h4 mb-1">Profile</h2>
+                        <p class="text-secondary mb-0">Account actions available to all authenticated roles.</p>
+                    </div>
+                    <div id="profileSummary" class="mb-3"></div>
+                    <div class="row g-3">
+                        <div id="resendVerificationBlock" class="col-md-5">
+                            <h3 class="h5">Resend verification</h3>
+                            <button class="btn btn-outline-secondary" type="button" onclick="handleResendVerification()">Send verification email again</button>
+                        </div>
+                        <div class="col-md-7">
+                            <form onsubmit="handleChangePassword(event)" class="vstack gap-3">
+                                <h3 class="h5">Change password</h3>
+                                <input type="password" id="currentPassword" class="form-control" placeholder="Current password" required>
+                                <input type="password" id="newPassword" class="form-control" placeholder="New password" required>
+                                <button class="btn btn-primary" type="submit">Update password</button>
+                            </form>
+                        </div>
+                    </div>
                 </div>
             </div>
-        </div>
-    </div>
+        </section>
+
+        <section class="row g-3 mb-3">
+            <div class="col-lg-6">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <h2 class="h4 mb-1">Family members</h2>
+                            <p class="text-secondary mb-0">Manage the kinship tree used for gift suggestions.</p>
+                        </div>
+                        <div id="familyList" class="vstack gap-2 mb-3">Loading...</div>
+                        <form onsubmit="handleAddFamily(event)" class="vstack gap-3">
+                            <input type="text" id="famName" class="form-control" placeholder="Name" required>
+                            <select id="famRelation" class="form-select" required>
+                                <option value="PARENT">Parent</option>
+                                <option value="SIBLING">Sibling</option>
+                                <option value="CHILD">Child</option>
+                                <option value="COUSIN">Cousin</option>
+                                <option value="UNCLE_AUNT">Uncle/Aunt</option>
+                                <option value="FAMILY_FRIEND">Family Friend</option>
+                                <option value="OTHER">Other</option>
+                            </select>
+                            <select id="famTier" class="form-select" required>
+                                <option value="CLOSE">CLOSE</option>
+                                <option value="EXTENDED">EXTENDED</option>
+                                <option value="FRIEND">FRIEND</option>
+                            </select>
+                            <button class="btn btn-primary" type="submit">Add relative</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-6">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <h2 class="h4 mb-1">My contributions</h2>
+                            <p class="text-secondary mb-0">Track the gifts you've funded.</p>
+                        </div>
+                        <div id="myContributionsList" class="vstack gap-2">Loading...</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="registrant" class="mb-3" data-role="registrant" hidden>
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="mb-3">
+                        <h2 class="h4 mb-1">Registrant create</h2>
+                        <p class="text-secondary mb-0">Create registries, manage registry gifts, and update gift statuses.</p>
+                    </div>
+                    <div class="row g-3 mb-4">
+                        <div class="col-lg-4">
+                            <form onsubmit="handleCreateRegistry(event)" class="vstack gap-3">
+                                <h3 class="h5">Create registry</h3>
+                                <input type="text" id="regTitle" class="form-control" placeholder="Registry title" required>
+                                <input type="text" id="regCouple" class="form-control" placeholder="Couple name" required>
+                                <input type="date" id="regDate" class="form-control" required>
+                                <select id="regPublic" class="form-select">
+                                    <option value="true">Public</option>
+                                    <option value="false">Private</option>
+                                </select>
+                                <button class="btn btn-primary" type="submit">Create registry</button>
+                            </form>
+                        </div>
+                        <div class="col-lg-8">
+                            <h3 class="h5">My registries</h3>
+                            <div id="myRegistriesList" class="vstack gap-2"></div>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 align-items-start">
+                        <div class="col-lg-6">
+                            <h3 class="h5" id="managedRegistryTitle">Select a registry</h3>
+                            <select id="managedRegistrySelect" class="form-select mb-3" onchange="loadManagedRegistry(Number(this.value))"></select>
+                            <div id="managedRegistryItems" class="vstack gap-2">Choose a registry to see its gift items.</div>
+                        </div>
+                        <div class="col-lg-6">
+                            <form onsubmit="handleSaveManagedGift(event)" class="vstack gap-3">
+                                <h3 class="h5">Gift editor</h3>
+                                <input type="hidden" id="managedGiftId">
+                                <input type="hidden" id="managedGiftRegistryId">
+                                <input type="text" id="managedGiftTitle" class="form-control" placeholder="Gift title" required>
+                                <input type="text" id="managedGiftDesc" class="form-control" placeholder="Description">
+                                <input type="url" id="managedGiftImageUrl" class="form-control" placeholder="Image URL">
+                                <input type="number" step="0.01" min="1000" id="managedGiftTargetKzt" class="form-control" placeholder="Target amount KZT" required>
+                                <input type="number" step="0.01" min="0" id="managedGiftTargetEur" class="form-control" placeholder="Target amount EUR">
+                                <select id="managedGiftPriority" class="form-select">
+                                    <option value="HIGH">HIGH</option>
+                                    <option value="MEDIUM" selected>MEDIUM</option>
+                                    <option value="LOW">LOW</option>
+                                </select>
+                                <button class="btn btn-primary" type="submit">Save gift</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="admin" class="mb-3" data-role="admin" hidden>
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="mb-3">
+                        <h2 class="h4 mb-1">Admin console</h2>
+                        <p class="text-secondary mb-0">User management, all registries, audit logs, and exchange-rate snapshots.</p>
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-lg-6">
+                            <h3 class="h5">Users</h3>
+                            <div id="adminUsersList" class="vstack gap-2"></div>
+                        </div>
+                        <div class="col-lg-6">
+                            <h3 class="h5">Registries</h3>
+                            <div id="adminRegistriesList" class="vstack gap-2"></div>
+                        </div>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-lg-6">
+                            <h3 class="h5">Audit logs</h3>
+                            <div id="auditLogsList" class="vstack gap-2"></div>
+                        </div>
+                        <div class="col-lg-6">
+                            <h3 class="h5">Exchange rates</h3>
+                            <div id="exchangeRatesList" class="mb-3"></div>
+                            <form onsubmit="handleCreateExchangeRate(event)" class="vstack gap-3">
+                                <input type="text" id="exchangeFrom" class="form-control" placeholder="From currency (EUR)" value="EUR" required>
+                                <input type="text" id="exchangeTo" class="form-control" placeholder="To currency (KZT)" value="KZT" required>
+                                <input type="number" step="0.000001" id="exchangeRateValue" class="form-control" placeholder="Rate" required>
+                                <input type="text" id="exchangeSource" class="form-control" placeholder="Source" value="manual" required>
+                                <button class="btn btn-primary" type="submit">Save exchange rate</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
 
     <script src="app.js"></script>
 </body>

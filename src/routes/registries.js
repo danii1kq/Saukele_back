@@ -3,6 +3,7 @@ const crypto = require("crypto");
 const { z } = require("zod");
 const prisma = require("../lib/prisma");
 const { requireAuth, requireRole } = require("../middleware/auth");
+const { recordAudit } = require("../lib/audit");
 
 const router = express.Router();
 
@@ -77,6 +78,24 @@ router.get("/", async (req, res, next) => {
   }
 });
 
+router.get("/mine", requireAuth, async (req, res, next) => {
+  try {
+    const registries = await prisma.registry.findMany({
+      where: { userId: req.user.id },
+      orderBy: { createdAt: "desc" },
+      include: {
+        giftItems: {
+          orderBy: { createdAt: "desc" },
+        },
+      },
+    });
+
+    res.json({ data: registries });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.post("/", requireAuth, requireRole("REGISTRANT", "ADMIN"), async (req, res, next) => {
   try {
     const parsed = createRegistrySchema.parse(req.body);
@@ -91,6 +110,15 @@ router.post("/", requireAuth, requireRole("REGISTRANT", "ADMIN"), async (req, re
         shareCode,
       },
     });
+
+    await recordAudit(prisma, {
+      req,
+      action: "REGISTRY_CREATED",
+      resourceType: "Registry",
+      resourceId: registry.id,
+      newValues: registry,
+    });
+
     res.status(201).json(registry);
   } catch (error) {
     if (error.name === "ZodError") {
@@ -152,6 +180,16 @@ router.put("/:id", requireAuth, requireRole("REGISTRANT", "ADMIN"), async (req, 
         isPublic: parsed.isPublic,
       },
     });
+
+    await recordAudit(prisma, {
+      req,
+      action: "REGISTRY_UPDATED",
+      resourceType: "Registry",
+      resourceId: registryId,
+      oldValues: registry,
+      newValues: updated,
+    });
+
     res.json(updated);
   } catch (error) {
     if (error.name === "ZodError") {
@@ -186,6 +224,15 @@ router.delete("/:id", requireAuth, requireRole("REGISTRANT", "ADMIN"), async (re
     await prisma.registry.update({
       where: { id: registryId },
       data: { status: "ARCHIVED" },
+    });
+
+    await recordAudit(prisma, {
+      req,
+      action: "REGISTRY_ARCHIVED",
+      resourceType: "Registry",
+      resourceId: registryId,
+      oldValues: { status: registry.status },
+      newValues: { status: "ARCHIVED" },
     });
 
     res.status(204).send();

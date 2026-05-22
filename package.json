@@ -5,7 +5,7 @@
   "scripts": {
     "start": "node src/app.js",
     "dev:backend": "nodemon src/app.js",
-    "dev:frontend": "http-server frontend -p 8080 -P http://localhost:3000?",
+    "dev:frontend": "http-server frontend -p 8080 -P http://localhost:4000?",
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "migrate": "npx prisma migrate dev",
     "seed": "node prisma/seed.js",
